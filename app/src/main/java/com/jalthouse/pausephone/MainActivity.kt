@@ -124,12 +124,7 @@ class MainActivity : ComponentActivity() {
         Store.init(this)
         setContent {
             watchStore()
-            val systemDark = isSystemInDarkTheme()
-            Ink.dark = when (Store.theme) {
-                "dark" -> true
-                "system" -> systemDark
-                else -> false
-            }
+            Ink.dark = Store.theme == "dark"
             val view = LocalView.current
             SideEffect {
                 window.statusBarColor = Ink.paper.toArgb()
@@ -414,6 +409,7 @@ private fun AppsScreen(go: (Screen) -> Unit) {
             apps.forEachIndexed { i, r ->
                 ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < apps.lastIndex)
             }
+            PrimaryButton("Add an app", { go(Screen.AddApp) }, Modifier.fillMaxWidth().padding(top = 12.dp))
         }
         Column {
             Text("Websites", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
@@ -421,10 +417,8 @@ private fun AppsScreen(go: (Screen) -> Unit) {
             sites.forEachIndexed { i, r ->
                 ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < sites.lastIndex)
             }
+            PrimaryButton("Add a website", { addingSite = true }, Modifier.fillMaxWidth().padding(top = 12.dp))
         }
-        Spacer(Modifier.height(4.dp))
-        PrimaryButton("Add an app", { go(Screen.AddApp) }, Modifier.fillMaxWidth())
-        QuietButton("Add a website", { addingSite = true }, Modifier.fillMaxWidth())
         Text(
             "Websites work in Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.",
             style = Type.small,
@@ -506,7 +500,7 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Appearance", style = Type.heading, color = Ink.ink)
                 Choice(
-                    options = listOf("light" to "Light", "dark" to "Black", "system" to "Match phone"),
+                    options = listOf("light" to "Light", "dark" to "Black"),
                     selected = Store.theme,
                     onSelect = { Store.theme = it },
                 )

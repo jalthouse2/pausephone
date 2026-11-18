@@ -5,6 +5,13 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -103,11 +110,12 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         onClick = onClick,
         modifier = modifier.height(56.dp),
         shape = RoundedCornerShape(28.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = if (dark) Ink.mist else Ink.ink,
             contentColor = if (dark) Ink.night else Ink.paper,
         ),
-    ) { Text(text, style = Type.button) }
+    ) { Text(text, style = Type.button, maxLines = 1) }
 }
 
 @Composable
@@ -116,12 +124,16 @@ fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
         onClick = onClick,
         modifier = modifier.height(56.dp),
         shape = RoundedCornerShape(28.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
         border = BorderStroke(1.dp, if (dark) Ink.mistLine else Ink.ink),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = if (dark) Ink.mist else Ink.ink),
-    ) { Text(text, style = Type.button) }
+    ) { Text(text, style = Type.button, maxLines = 1) }
 }
 
-/** A labelled slider that moves through a fixed list of [steps]. */
+/**
+ * A labelled row of dots, one per step: tap a dot or drag along them, or use − and +.
+ * The dots sit inset from the screen edge so the first and last are easy to reach.
+ */
 @Composable
 fun <T> StepSlider(
     label: String,
@@ -132,30 +144,73 @@ fun <T> StepSlider(
     onChange: (T) -> Unit,
 ) {
     val index = steps.indexOf(value).coerceAtLeast(0)
+    val current by rememberUpdatedState(index)
+    val change by rememberUpdatedState(onChange)
+    val dotColor = Ink.ink
+    val restColor = Ink.track
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
             Text(label, style = Type.heading, color = Ink.ink, modifier = Modifier.weight(1f))
             Text(format(value), style = Type.body.copy(fontSize = 15.sp), color = Ink.ink)
         }
         Text(hint, style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 2.dp))
-        Slider(
-            value = index.toFloat(),
-            onValueChange = { v ->
-                val i = v.roundToInt().coerceIn(0, steps.lastIndex)
-                if (i != index) onChange(steps[i])
-            },
-            valueRange = 0f..steps.lastIndex.toFloat(),
-            steps = (steps.size - 2).coerceAtLeast(0),
-            colors = SliderDefaults.colors(
-                thumbColor = Ink.ink,
-                activeTrackColor = Ink.ink,
-                inactiveTrackColor = Ink.track,
-                activeTickColor = Color.Transparent,
-                inactiveTickColor = Color.Transparent,
-            ),
-        )
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            StepButton("−", "Less") { if (current > 0) change(steps[current - 1]) }
+            Canvas(
+                Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .semantics { stateDescription = format(value) }
+                    .pointerInput(steps.size) {
+                        val pad = 10.dp.toPx()
+                        fun pick(x: Float) {
+                            val span = (size.width - 2 * pad).coerceAtLeast(1f)
+                            val i = (((x - pad) / span) * steps.lastIndex).roundToInt().coerceIn(0, steps.lastIndex)
+                            if (i != current) change(steps[i])
+                        }
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            pick(down.position.x)
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val c = event.changes.firstOrNull() ?: break
+                                if (!c.pressed) break
+                                pick(c.position.x)
+                                c.consume()
+                            }
+                        }
+                    },
+            ) {
+                val pad = 10.dp.toPx()
+                val span = size.width - 2 * pad
+                val cy = size.height / 2f
+                val n = steps.size
+                for (i in 0 until n) {
+                    val cx = pad + if (n > 1) span * i / (n - 1) else span / 2f
+                    when {
+                        i == index -> drawCircle(dotColor, radius = 8.dp.toPx(), center = Offset(cx, cy))
+                        i < index -> drawCircle(dotColor, radius = 3.dp.toPx(), center = Offset(cx, cy))
+                        else -> drawCircle(restColor, radius = 3.dp.toPx(), center = Offset(cx, cy))
+                    }
+                }
+            }
+            StepButton("+", "More") { if (current < steps.lastIndex) change(steps[current + 1]) }
+        }
         Spacer(Modifier.height(4.dp))
         HorizontalDivider(color = Ink.line)
+    }
+}
+
+@Composable
+private fun StepButton(symbol: String, label: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .size(44.dp)
+            .clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+            .semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(symbol, style = Type.body.copy(fontSize = 22.sp, fontWeight = FontWeight.Light), color = Ink.ink)
     }
 }
 

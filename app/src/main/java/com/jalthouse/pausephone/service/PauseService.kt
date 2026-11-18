@@ -32,7 +32,7 @@ class PauseService : AccessibilityService() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_USER_PRESENT -> {
-                    if (Store.unlockPauseSec > 0) {
+                    if (Store.unlockPauseSec > 0 && !Store.onBreak()) {
                         launch(PauseMode.UNLOCK, null)
                     }
                 }
@@ -115,6 +115,10 @@ class PauseService : AccessibilityService() {
     private fun enter(rule: Rule) {
         val now = System.currentTimeMillis()
         if (PauseActivity.visible || now - lastLaunch < LAUNCH_GAP_MS) return
+        if (Store.onBreak(now)) {
+            currentId = null
+            return
+        }
 
         if (rule.blocked) {
             currentId = null

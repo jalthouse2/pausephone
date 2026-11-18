@@ -3,17 +3,23 @@ package com.jalthouse.pausephone
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,16 +36,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -49,13 +65,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
@@ -76,13 +96,23 @@ import com.jalthouse.pausephone.ui.Type
 import com.jalthouse.pausephone.ui.minutesText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
+private enum class Tab(val label: String, val icon: ImageVector) {
+    HOME("Home", Icons.Outlined.Home),
+    APPS("Apps", Icons.AutoMirrored.Outlined.List),
+    TODAY("Today", Icons.Outlined.DateRange),
+    SETTINGS("Settings", Icons.Outlined.Settings),
+}
+
+/** Screens that open on top of a tab. */
 private sealed interface Screen {
-    data object Today : Screen
-    data object Apps : Screen
     data object Unlock : Screen
     data object AddApp : Screen
     data class RuleEdit(val id: String) : Screen
@@ -92,41 +122,138 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
-        setContent { PauseTheme { App() } }
+        setContent {
+            watchStore()
+            val systemDark = isSystemInDarkTheme()
+            Ink.dark = when (Store.theme) {
+                "dark" -> true
+                "system" -> systemDark
+                else -> false
+            }
+            val view = LocalView.current
+            SideEffect {
+                window.statusBarColor = Ink.paper.toArgb()
+                window.navigationBarColor = Ink.paper.toArgb()
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = !Ink.dark
+                    isAppearanceLightNavigationBars = !Ink.dark
+                }
+            }
+            PauseTheme { App() }
+        }
     }
 }
 
 @Composable
 private fun App() {
     var welcomed by remember { mutableStateOf(Store.welcomeDone) }
-    val stack = remember { mutableStateListOf<Screen>(Screen.Today) }
+    var tab by remember { mutableStateOf(Tab.HOME) }
+    val stack = remember { mutableStateListOf<Screen>() }
     val go: (Screen) -> Unit = { stack.add(it) }
-    val back: () -> Unit = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
+    val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
 
-    Box(Modifier.fillMaxSize().background(Ink.paper).systemBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(Ink.paper).systemBarsPadding()) {
         if (!welcomed) {
             Welcome { Store.welcomeDone = true; welcomed = true }
         } else {
-            BackHandler(enabled = stack.size > 1, onBack = back)
-            Screens(stack.last(), go, back) { id -> stack.removeAt(stack.lastIndex); go(Screen.RuleEdit(id)) }
+            Main(tab, { tab = it }, stack, go, back)
         }
     }
 }
 
 @Composable
-private fun Screens(screen: Screen, go: (Screen) -> Unit, back: () -> Unit, replaceWithRule: (String) -> Unit) {
-    when (val s = screen) {
-        Screen.Today -> TodayScreen(go)
-        Screen.Apps -> AppsScreen(go, back)
-        Screen.Unlock -> UnlockScreen(back)
-        Screen.AddApp -> AddAppScreen(onPicked = replaceWithRule, back = back)
-        is Screen.RuleEdit -> RuleScreen(s.id, back)
+private fun ColumnScope.Main(
+    tab: Tab,
+    setTab: (Tab) -> Unit,
+    stack: MutableList<Screen>,
+    go: (Screen) -> Unit,
+    back: () -> Unit,
+) {
+        BackHandler(enabled = stack.isNotEmpty() || tab != Tab.HOME) {
+            if (stack.isNotEmpty()) back() else setTab(Tab.HOME)
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            val top = stack.lastOrNull()
+            if (top != null) {
+                when (top) {
+                    Screen.Unlock -> UnlockScreen(back)
+                    Screen.AddApp -> AddAppScreen(
+                        onPicked = { id -> stack.removeAt(stack.lastIndex); go(Screen.RuleEdit(id)) },
+                        back = back,
+                    )
+                    is Screen.RuleEdit -> RuleScreen(top.id, back)
+                }
+            } else {
+                when (tab) {
+                    Tab.HOME -> HomeScreen()
+                    Tab.APPS -> AppsScreen(go)
+                    Tab.TODAY -> TodayScreen()
+                    Tab.SETTINGS -> SettingsScreen(go)
+                }
+            }
+        }
+        if (stack.isEmpty()) TabBar(tab, setTab)
+}
+
+@Composable
+private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
+    Column {
+        HorizontalDivider(color = Ink.line)
+        NavigationBar(containerColor = Ink.paper, tonalElevation = 0.dp) {
+            Tab.entries.forEach { t ->
+                NavigationBarItem(
+                    selected = t == selected,
+                    onClick = { onSelect(t) },
+                    icon = { Icon(t.icon, contentDescription = null) },
+                    label = { Text(t.label, style = Type.small.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium)) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Ink.ink,
+                        selectedTextColor = Ink.ink,
+                        unselectedIconColor = Ink.muted,
+                        unselectedTextColor = Ink.muted,
+                        indicatorColor = Ink.tile,
+                    ),
+                )
+            }
+        }
     }
 }
 
 /** Reading the store's version makes the calling screen redraw whenever the store changes. */
 @Composable
 private fun watchStore(): Int = Store.version
+
+@Composable
+private fun TabTitle(text: String) {
+    Text(text, style = Type.title, color = Ink.ink, modifier = Modifier.padding(top = 20.dp, bottom = 12.dp))
+}
+
+private fun serviceEnabled(context: Context): Boolean {
+    val enabled = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+    ) ?: return false
+    val ours = ComponentName(context, PauseService::class.java)
+    return enabled.split(':').any { ComponentName.unflattenFromString(it) == ours }
+}
+
+@Composable
+private fun rememberServiceEnabled(): Boolean {
+    val context = LocalContext.current
+    var enabled by remember { mutableStateOf(serviceEnabled(context)) }
+    LifecycleResumeEffect(Unit) {
+        enabled = serviceEnabled(context)
+        onPauseOrDispose { }
+    }
+    return enabled
+}
+
+private fun openAccessibility(context: Context) =
+    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+
+private fun clock(millis: Long): String =
+    LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("HH:mm"))
 
 // ---------------------------------------------------------------- welcome
 
@@ -155,61 +282,61 @@ private fun Welcome(onBegin: () -> Unit) {
     }
 }
 
-// ---------------------------------------------------------------- today
+// ---------------------------------------------------------------- home
 
-private fun serviceEnabled(context: Context): Boolean {
-    val enabled = Settings.Secure.getString(
-        context.contentResolver,
-        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
-    ) ?: return false
-    val ours = ComponentName(context, PauseService::class.java)
-    return enabled.split(':').any { ComponentName.unflattenFromString(it) == ours }
-}
-
+/** Almost nothing: the ensō. Tap it to breathe. */
 @Composable
-private fun TodayScreen(go: (Screen) -> Unit) {
+private fun HomeScreen() {
     watchStore()
     val context = LocalContext.current
-    var enabled by remember { mutableStateOf(serviceEnabled(context)) }
-    LifecycleResumeEffect(Unit) {
-        enabled = serviceEnabled(context)
-        onPauseOrDispose { }
+    val enabled = rememberServiceEnabled()
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+        Box(
+            Modifier.clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                role = Role.Button,
+                onClickLabel = "Breathe",
+            ) { context.startActivity(PauseActivity.launchIntent(context, PauseMode.FREE, null)) },
+        ) { Enso(168.dp) }
+        Text(
+            "tap to breathe",
+            style = Type.small,
+            color = Ink.muted,
+            modifier = Modifier.padding(top = 20.dp),
+        )
+        Spacer(Modifier.weight(1f))
+        when {
+            !enabled -> TextButton(onClick = { openAccessibility(context) }) {
+                Text("Turn on [pause] in Accessibility to begin", style = Type.small, color = Ink.ink)
+            }
+            Store.onBreak() -> Text(
+                "On a break until ${clock(Store.breakUntil)}",
+                style = Type.small,
+                color = Ink.muted,
+            )
+        }
     }
+}
+
+// ---------------------------------------------------------------- today
+
+@Composable
+private fun TodayScreen() {
+    watchStore()
     val stats = Store.today()
     val rules = Store.rules()
     val day = LocalDate.now().dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Enso(36.dp)
-            Text("[pause]", style = Type.wordmark, color = Ink.ink, modifier = Modifier.padding(start = 10.dp).weight(1f))
-            IconButton(onClick = { go(Screen.Apps) }) {
-                Icon(Icons.Outlined.Settings, contentDescription = "Apps and sites", tint = Ink.ink)
-            }
-        }
-
-        if (!enabled) {
-            Panel {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("One step to start", style = Type.heading, color = Ink.ink)
-                    Text(
-                        "Turn on [pause] in Accessibility settings. It lets the app notice when you open one of your chosen apps or sites, so it can pause first.",
-                        style = Type.small,
-                        color = Ink.muted,
-                    )
-                    QuietButton(
-                        "Open settings",
-                        { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                        Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(top = 20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 when (stats.pauses) {
                     0 -> "No pauses yet today."
@@ -228,24 +355,10 @@ private fun TodayScreen(go: (Screen) -> Unit) {
             StatBox("${stats.breathers}", "breathers", Modifier.weight(1f))
         }
 
-        Panel(Modifier.clickable(role = Role.Button) { go(Screen.Unlock) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Unlock pause", style = Type.heading, color = Ink.ink)
-                Text(
-                    if (Store.unlockPauseSec == 0) "Off" else "${Store.unlockPauseSec} s of breathing each time you open your phone",
-                    style = Type.small,
-                    color = Ink.muted,
-                )
-            }
-        }
-
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Opens left today", style = Type.heading, color = Ink.ink, modifier = Modifier.weight(1f))
-                TextButton(onClick = { go(Screen.Apps) }) { Text("Manage", style = Type.body.copy(fontSize = 14.sp), color = Ink.muted) }
-            }
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text("Opens left today", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
             if (rules.isEmpty()) {
-                Text("Add the apps and sites you'd like a pause before.", style = Type.small, color = Ink.muted)
+                Text("Add apps and sites in the Apps tab.", style = Type.small, color = Ink.muted)
             }
             rules.forEachIndexed { i, r ->
                 val trailing = when {
@@ -256,12 +369,6 @@ private fun TodayScreen(go: (Screen) -> Unit) {
                 ListRow(r.label, null, { LetterTile(r.label) }, null, trailing, divider = i < rules.lastIndex)
             }
         }
-
-        QuietButton(
-            "Breathe now",
-            { context.startActivity(PauseActivity.launchIntent(context, PauseMode.FREE, null)) },
-            Modifier.fillMaxWidth(),
-        )
     }
 }
 
@@ -289,7 +396,7 @@ private fun summary(r: Rule): String {
 }
 
 @Composable
-private fun AppsScreen(go: (Screen) -> Unit, back: () -> Unit) {
+private fun AppsScreen(go: (Screen) -> Unit) {
     watchStore()
     val rules = Store.rules()
     val apps = rules.filter { it.kind == Kind.APP }
@@ -297,44 +404,33 @@ private fun AppsScreen(go: (Screen) -> Unit, back: () -> Unit) {
     var addingSite by remember { mutableStateOf(false) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
-        BackHeader("Apps and sites", back)
-        Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Column {
-                Text("Phone", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
-                ListRow(
-                    "Unlock",
-                    if (Store.unlockPauseSec == 0) "off" else "${Store.unlockPauseSec} s pause",
-                    { LetterTile("Un") },
-                    { go(Screen.Unlock) },
-                    divider = false,
-                )
+        TabTitle("Apps and sites")
+        Column {
+            Text("Apps", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
+            if (apps.isEmpty()) Text("None yet.", style = Type.small, color = Ink.muted)
+            apps.forEachIndexed { i, r ->
+                ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < apps.lastIndex)
             }
-            Column {
-                Text("Apps", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
-                if (apps.isEmpty()) Text("None yet.", style = Type.small, color = Ink.muted)
-                apps.forEachIndexed { i, r ->
-                    ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < apps.lastIndex)
-                }
-            }
-            Column {
-                Text("Websites", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
-                if (sites.isEmpty()) Text("None yet.", style = Type.small, color = Ink.muted)
-                sites.forEachIndexed { i, r ->
-                    ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < sites.lastIndex)
-                }
-            }
-            Spacer(Modifier.height(4.dp))
-            PrimaryButton("Add an app", { go(Screen.AddApp) }, Modifier.fillMaxWidth())
-            QuietButton("Add a website", { addingSite = true }, Modifier.fillMaxWidth())
-            Text(
-                "Websites work in Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.",
-                style = Type.small,
-                color = Ink.muted,
-                modifier = Modifier.padding(bottom = 24.dp),
-            )
         }
+        Column {
+            Text("Websites", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
+            if (sites.isEmpty()) Text("None yet.", style = Type.small, color = Ink.muted)
+            sites.forEachIndexed { i, r ->
+                ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < sites.lastIndex)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        PrimaryButton("Add an app", { go(Screen.AddApp) }, Modifier.fillMaxWidth())
+        QuietButton("Add a website", { addingSite = true }, Modifier.fillMaxWidth())
+        Text(
+            "Websites work in Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.",
+            style = Type.small,
+            color = Ink.muted,
+            modifier = Modifier.padding(bottom = 24.dp),
+        )
     }
 
     if (addingSite) {
@@ -347,6 +443,127 @@ private fun AppsScreen(go: (Screen) -> Unit, back: () -> Unit) {
                 }
             },
         )
+    }
+}
+
+// ---------------------------------------------------------------- settings
+
+@Composable
+private fun SettingsScreen(go: (Screen) -> Unit) {
+    watchStore()
+    val context = LocalContext.current
+    val enabled = rememberServiceEnabled()
+
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        TabTitle("Settings")
+
+        Panel(Modifier.clickable(role = Role.Button) { openAccessibility(context) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Accessibility", style = Type.heading, color = Ink.ink)
+                Text(
+                    if (enabled) "On. [pause] can step in before your apps and sites."
+                    else "Off. Tap to turn on [pause] so it can step in before your apps and sites.",
+                    style = Type.small,
+                    color = Ink.muted,
+                )
+            }
+        }
+
+        Panel {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Take a break", style = Type.heading, color = Ink.ink)
+                if (Store.onBreak()) {
+                    Text("On a break until ${clock(Store.breakUntil)}. No pauses until then.", style = Type.small, color = Ink.muted)
+                    QuietButton("Resume now", { Store.breakUntil = 0L }, Modifier.fillMaxWidth())
+                } else {
+                    Text("Set [pause] aside for a while. Your rules come back on their own.", style = Type.small, color = Ink.muted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        QuietButton("1 hour", { Store.breakUntil = System.currentTimeMillis() + 3_600_000L }, Modifier.weight(1f))
+                        QuietButton("Until tomorrow", {
+                            val tomorrow = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault())
+                            Store.breakUntil = tomorrow.toInstant().toEpochMilli()
+                        }, Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        Panel(Modifier.clickable(role = Role.Button) { go(Screen.Unlock) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Unlock pause", style = Type.heading, color = Ink.ink)
+                Text(
+                    if (Store.unlockPauseSec == 0) "Off" else "${Store.unlockPauseSec} s of breathing each time you open your phone",
+                    style = Type.small,
+                    color = Ink.muted,
+                )
+            }
+        }
+
+        Panel {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Appearance", style = Type.heading, color = Ink.ink)
+                Choice(
+                    options = listOf("light" to "Light", "dark" to "Black", "system" to "Match phone"),
+                    selected = Store.theme,
+                    onSelect = { Store.theme = it },
+                )
+            }
+        }
+        ToggleRow(
+            "Light breathing screen",
+            "Dark dots on white instead of white dots on black",
+            Store.breatheLight,
+        ) { Store.breatheLight = it }
+
+        Panel {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("About", style = Type.heading, color = Ink.ink)
+                Text(
+                    "Nothing leaves your phone. No account, no tracking, no ads.",
+                    style = Type.small,
+                    color = Ink.muted,
+                )
+                TextButton(
+                    onClick = {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/jalthouse2/pausephone/issues")),
+                        )
+                    },
+                ) { Text("Report a bug or suggest an idea", style = Type.body, color = Ink.ink) }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** A row of choices, one selected. */
+@Composable
+private fun Choice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (key, label) ->
+            val on = key == selected
+            if (on) {
+                Button(
+                    onClick = { onSelect(key) },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink.ink, contentColor = Ink.paper),
+                ) { Text(label, style = Type.small.copy(fontWeight = FontWeight.Medium), maxLines = 1) }
+            } else {
+                OutlinedButton(
+                    onClick = { onSelect(key) },
+                    modifier = Modifier.weight(1f).height(44.dp),
+                    shape = RoundedCornerShape(22.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    border = BorderStroke(1.dp, Ink.track),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink.ink),
+                ) { Text(label, style = Type.small.copy(fontWeight = FontWeight.Medium), maxLines = 1) }
+            }
+        }
     }
 }
 
@@ -488,7 +705,7 @@ private fun RuleScreen(id: String, back: () -> Unit) {
                 PAUSES, rule.pauseSec, { if (it == 0) "none" else "$it s" },
             ) { save(rule.copy(pauseSec = it)) }
             StepSlider(
-                "Breath length", "One breath out, one breath in",
+                "Breath length", "One breath in, one breath out",
                 BREATHS, rule.breathSec, { "$it s each way" },
             ) { save(rule.copy(breathSec = it)) }
             StepSlider(
@@ -542,7 +759,7 @@ private fun UnlockScreen(back: () -> Unit) {
                 PAUSES, Store.unlockPauseSec, { if (it == 0) "off" else "$it s" },
             ) { Store.unlockPauseSec = it }
             StepSlider(
-                "Breath length", "One breath out, one breath in",
+                "Breath length", "One breath in, one breath out",
                 BREATHS, Store.unlockBreathSec, { "$it s each way" },
             ) { Store.unlockBreathSec = it }
         }

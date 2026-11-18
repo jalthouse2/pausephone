@@ -20,7 +20,7 @@ fun ease(x: Float): Float {
     return 0.5f - 0.5f * cos(PI.toFloat() * c)
 }
 
-/** 0 = gathered in, 1 = fully spread out, for a breath cycle that starts by breathing out. */
+/** 0 = gathered in, 1 = fully spread out. The cloud spreads on the in-breath and gathers on the out-breath. */
 fun spread(t: Float): Float = if (t < 0.5f) ease(t * 2f) else 1f - ease((t - 0.5f) * 2f)
 
 private class Dots(n: Int, seed: Int) {
@@ -47,7 +47,7 @@ private class Dots(n: Int, seed: Int) {
 }
 
 /**
- * Thousands of tiny dots that spread out roundly on the out-breath and gather back in.
+ * Thousands of tiny dots that spread out roundly as you breathe in and gather back as you breathe out.
  * [elapsed] is read during drawing only, so the cloud animates without recomposing.
  */
 @Composable

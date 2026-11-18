@@ -24,6 +24,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -79,6 +83,16 @@ class PauseActivity : ComponentActivity() {
         request = parse(intent)
         onBackPressedDispatcher.addCallback(this) { onBack() }
         setContent {
+            Ink.breatheLight = Store.breatheLight
+            val view = LocalView.current
+            SideEffect {
+                window.statusBarColor = Ink.night.toArgb()
+                window.navigationBarColor = Ink.night.toArgb()
+                WindowCompat.getInsetsController(window, view).apply {
+                    isAppearanceLightStatusBars = Ink.breatheLight
+                    isAppearanceLightNavigationBars = Ink.breatheLight
+                }
+            }
             PauseTheme {
                 request?.let { req -> PauseScreen(req, actions(req)) }
             }
@@ -200,7 +214,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         while (true) withFrameNanos { clock.floatValue = (it - start) / 1_000_000_000f }
     }
     val cycle = breath * 2f
-    val breathingOut by remember(req.stamp, breath) { derivedStateOf { clock.floatValue % cycle < breath } }
+    val breathingIn by remember(req.stamp, breath) { derivedStateOf { clock.floatValue % cycle < breath } }
     val secondsLeft by remember(req.stamp, pauseSec) { derivedStateOf { ceil(pauseSec - clock.floatValue).toInt() } }
     val quoteWindow = cycle * 2f
     val quoteIndex by remember(req.stamp, breath) {
@@ -229,8 +243,8 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     }
     val phase = when {
         (req.mode == PauseMode.ENTRY || req.mode == PauseMode.UNLOCK) && !waiting -> "ready when you are"
-        breathingOut -> "breathe out"
-        else -> "breathe in"
+        breathingIn -> "breathe in"
+        else -> "breathe out"
     }
 
     Column(

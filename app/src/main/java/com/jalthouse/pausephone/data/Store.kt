@@ -130,6 +130,23 @@ object Store {
         get() = prefs.getInt("unlockBreathSec", 4)
         set(v) { prefs.edit().putInt("unlockBreathSec", v).apply(); changed() }
 
+    /** "light", "dark" or "system". */
+    var theme: String
+        get() = prefs.getString("theme", "light") ?: "light"
+        set(v) { prefs.edit().putString("theme", v).apply(); changed() }
+
+    /** Dark dots on white for the breathing screen, instead of white on black. */
+    var breatheLight: Boolean
+        get() = prefs.getBoolean("breatheLight", false)
+        set(v) { prefs.edit().putBoolean("breatheLight", v).apply(); changed() }
+
+    /** While now is before this time, [pause] steps aside completely. 0 = not on a break. */
+    var breakUntil: Long
+        get() = prefs.getLong("breakUntil", 0L)
+        set(v) { prefs.edit().putLong("breakUntil", v).apply(); changed() }
+
+    fun onBreak(now: Long = System.currentTimeMillis()) = breakUntil > now
+
     fun isNight(now: LocalTime = LocalTime.now()): Boolean =
         if (nightStart <= nightEnd) now >= nightStart && now < nightEnd
         else now >= nightStart || now < nightEnd

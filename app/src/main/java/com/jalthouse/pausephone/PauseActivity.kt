@@ -46,6 +46,7 @@ import com.jalthouse.pausephone.data.QUOTES
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Sessions
 import com.jalthouse.pausephone.data.Store
+import com.jalthouse.pausephone.ui.Breath
 import com.jalthouse.pausephone.ui.DotCloud
 import com.jalthouse.pausephone.ui.Ink
 import com.jalthouse.pausephone.ui.Manrope
@@ -203,7 +204,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     val pauseSec = when (req.mode) {
         PauseMode.ENTRY -> rule?.pauseSec ?: 0
         PauseMode.UNLOCK -> Store.unlockPauseSec
-        PauseMode.BREATHER -> breath * 2
+        PauseMode.BREATHER -> kotlin.math.ceil(Breath(breath.toFloat()).cycle).toInt()
         else -> 0
     }
 
@@ -213,8 +214,9 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         val start = withFrameNanos { it }
         while (true) withFrameNanos { clock.floatValue = (it - start) / 1_000_000_000f }
     }
-    val cycle = breath * 2f
-    val breathingIn by remember(req.stamp, breath) { derivedStateOf { clock.floatValue % cycle < breath } }
+    val rhythm = remember(breath) { Breath(breath.toFloat()) }
+    val cycle = rhythm.cycle
+    val breathWord by remember(req.stamp, breath) { derivedStateOf { rhythm.word(clock.floatValue) } }
     val secondsLeft by remember(req.stamp, pauseSec) { derivedStateOf { ceil(pauseSec - clock.floatValue).toInt() } }
     val quoteWindow = cycle * 2f
     val quoteIndex by remember(req.stamp, breath) {
@@ -243,8 +245,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     }
     val phase = when {
         (req.mode == PauseMode.ENTRY || req.mode == PauseMode.UNLOCK) && !waiting -> "ready when you are"
-        breathingIn -> "breathe in"
-        else -> "breathe out"
+        else -> breathWord
     }
 
     Column(

@@ -13,7 +13,7 @@ import java.time.LocalTime
 enum class Kind { APP, SITE }
 
 /**
- * One app or website and how [pause]phone treats it.
+ * One app or website and how [pause] treats it.
  * For apps, [id] is the package name; for websites it is the domain, e.g. "reddit.com".
  * A value of 0 means "off" or "no limit" for opens, session length and breather.
  */

@@ -31,6 +31,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -48,37 +52,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-/** The ensō with a pause sign. */
+/** The brush ensō with a pause sign. */
 @Composable
-fun Enso(size: Dp, color: Color = Ink.ink, detailed: Boolean = true) {
+fun Enso(size: Dp, color: Color = Ink.ink) {
+    val paths = remember {
+        val enso = PathParser().parsePathString(ENSO_PATH).toPath().apply { fillType = PathFillType.EvenOdd }
+        val bars = PathParser().parsePathString(PAUSE_PATH).toPath()
+        enso to bars
+    }
     Canvas(
         Modifier
             .size(size)
-            .semantics { contentDescription = "[pause]phone" },
+            .semantics { contentDescription = "[pause]" },
     ) {
         val k = this.size.minDimension / 200f
-        fun arc(r: Float, startDeg: Float, sweepDeg: Float, width: Float, alpha: Float) {
-            drawArc(
-                color = color,
-                startAngle = startDeg,
-                sweepAngle = sweepDeg,
-                useCenter = false,
-                topLeft = Offset((100f - r) * k, (100f - r) * k),
-                size = Size(2 * r * k, 2 * r * k),
-                alpha = alpha,
-                style = Stroke(width = width * k, cap = StrokeCap.Round),
-            )
+        scale(k, k, pivot = Offset.Zero) {
+            drawPath(paths.first, color)
+            drawPath(paths.second, color)
         }
-        arc(80f, 320f, 325f, if (detailed) 13f else 15f, 1f)
-        if (detailed) {
-            arc(76f, 330f, 280f, 7f, 0.8f)
-            arc(84f, 340f, 220f, 2.5f, 0.5f)
-        }
-        val barW = 11f * k
-        val barH = 44f * k
-        val radius = CornerRadius(4f * k, 4f * k)
-        drawRoundRect(color, Offset(83f * k, 78f * k), Size(barW, barH), radius)
-        drawRoundRect(color, Offset(106f * k, 78f * k), Size(barW, barH), radius)
     }
 }
 

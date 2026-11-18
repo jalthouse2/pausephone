@@ -138,7 +138,7 @@ private fun Welcome(onBegin: () -> Unit) {
     ) {
         Enso(184.dp)
         Text(
-            "[pause]phone",
+            "[pause]",
             style = Type.wordmark.copy(fontSize = 34.sp, fontWeight = FontWeight.Light, letterSpacing = 1.4.sp),
             color = Ink.ink,
             modifier = Modifier.padding(top = 28.dp),
@@ -184,8 +184,8 @@ private fun TodayScreen(go: (Screen) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Enso(36.dp, detailed = false)
-            Text("[pause]phone", style = Type.wordmark, color = Ink.ink, modifier = Modifier.padding(start = 10.dp).weight(1f))
+            Enso(36.dp)
+            Text("[pause]", style = Type.wordmark, color = Ink.ink, modifier = Modifier.padding(start = 10.dp).weight(1f))
             IconButton(onClick = { go(Screen.Apps) }) {
                 Icon(Icons.Outlined.Settings, contentDescription = "Apps and sites", tint = Ink.ink)
             }
@@ -196,7 +196,7 @@ private fun TodayScreen(go: (Screen) -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("One step to start", style = Type.heading, color = Ink.ink)
                     Text(
-                        "Turn on [pause]phone in Accessibility settings. It lets the app notice when you open one of your chosen apps or sites, so it can pause first.",
+                        "Turn on [pause] in Accessibility settings. It lets the app notice when you open one of your chosen apps or sites, so it can pause first.",
                         style = Type.small,
                         color = Ink.muted,
                     )

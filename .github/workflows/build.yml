@@ -36,5 +36,5 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk pausephone.apk
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest pausephone.apk \
-            --title "[pause]phone — latest build" \
+            --title "[pause] — latest build" \
             --notes "Built from ${GITHUB_SHA::7}. Open this page on your Android phone and tap pausephone.apk to install."

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">[pause]phone</string>
-    <string name="accessibility_description">[pause]phone watches which app or website is in front so it can show a breathing pause before the ones you chose. It reads only app names and the address bar of supported browsers, and nothing leaves your phone.</string>
+    <string name="app_name">[pause]</string>
+    <string name="accessibility_description">[pause] watches which app or website is in front so it can show a breathing pause before the ones you chose. It reads only app names and the address bar of supported browsers, and nothing leaves your phone.</string>
 </resources>

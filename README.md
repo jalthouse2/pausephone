@@ -1,4 +1,4 @@
-# [pause]phone
+# [pause]
 
 *take a pause. be present.*
 
@@ -21,7 +21,7 @@ Everything stays on the phone. There is no account, no network access and no ana
 
 1. On your Android phone, open **https://github.com/jalthouse2/pausephone/releases/latest/download/pausephone.apk**.
 2. Open the downloaded file. If Android asks, allow your browser to install apps.
-3. Open **[pause]phone**, tap **Begin**, then **Open settings** and turn on **[pause]phone** under Accessibility (on some phones it's under *Downloaded apps* or *Installed services*).
+3. Open **[pause]**, tap **Begin**, then **Open settings** and turn on **[pause]** under Accessibility (on some phones it's under *Downloaded apps* or *Installed services*).
 4. Tap the settings icon, then **Add an app** or **Add a website**, and set its sliders.
 
 Every push to `main` rebuilds the app on GitHub (see the Actions tab) and replaces the file at that link. To update, download and install it again; your settings stay.
@@ -41,7 +41,7 @@ Building it yourself: open the folder in Android Studio and press Run, or `./gra
 | Today, Apps and sites, rule sliders, unlock pause | `MainActivity.kt` |
 | Colours, Manrope type, ensō logo, shared controls | `ui/Theme.kt`, `ui/Components.kt` |
 
-Android has no public way to intercept an app launch, so [pause]phone uses an **accessibility service**. When the app in front changes to one with a rule, the service opens the breathing screen on top of it. "Open" closes the breathing screen and reveals the app underneath; "Not now" goes to the home screen. For websites, the service reads the address bar of supported browsers: Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.
+Android has no public way to intercept an app launch, so [pause] uses an **accessibility service**. When the app in front changes to one with a rule, the service opens the breathing screen on top of it. "Open" closes the breathing screen and reveals the app underneath; "Not now" goes to the home screen. For websites, the service reads the address bar of supported browsers: Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.
 
 If you leave an app and come back within 2 minutes, it's the same session and doesn't count as a new open.
 
@@ -50,7 +50,7 @@ If you leave an app and come back within 2 minutes, it's the same session and do
 - **Google Play.** Play restricts accessibility services to apps whose main purpose is accessibility, so publishing there would need a review argument or a different approach. Installing it yourself, or through F-Droid, is fine.
 - **Browser updates** sometimes rename the address bar's view id. If a browser stops being recognised, update its entry in `PauseService.BROWSERS`.
 - **Night hours** are fixed at 22:00 to 07:00 for now (`Store.nightStart` / `nightEnd`).
-- **Battery savers** on some phones (Xiaomi, Huawei, OnePlus) stop accessibility services. If pauses stop appearing, exempt [pause]phone from battery optimisation.
+- **Battery savers** on some phones (Xiaomi, Huawei, OnePlus) stop accessibility services. If pauses stop appearing, exempt [pause] from battery optimisation.
 - Sessions live in memory, so if Android kills the app, the next open starts a fresh pause.
 
 ## Credits

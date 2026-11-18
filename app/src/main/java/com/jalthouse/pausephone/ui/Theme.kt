@@ -32,7 +32,7 @@ object Ink {
     private fun breathe(onBlack: Long, onWhite: Long) = Color(if (breatheLight) onWhite else onBlack)
 
     val paper: Color get() = pick(0xFFF5F5F2, 0xFF121211)   // the page
-    val panel: Color get() = pick(0xFFFFFFFF, 0xFF1C1C1A)   // panels on the page
+    val panel: Color get() = pick(0xFFF5F5F2, 0xFF121211)   // panels: same as the page, outlined
     val tile: Color get() = pick(0xFFECECE9, 0xFF2A2A27)    // app letter tiles
     val line: Color get() = pick(0xFFE3E3E0, 0xFF2E2E2B)    // hairlines
     val track: Color get() = pick(0xFFCFCFCB, 0xFF4A4A46)   // slider track, switch off

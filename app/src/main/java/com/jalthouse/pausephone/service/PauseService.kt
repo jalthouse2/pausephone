@@ -125,9 +125,10 @@ class PauseService : AccessibilityService() {
             launch(PauseMode.BLOCKED, rule, "blocked")
             return
         }
-        if (rule.nightBlock && Store.isNight()) {
+        val window = rule.blockingWindow()
+        if (window != null) {
             currentId = null
-            launch(PauseMode.BLOCKED, rule, "night")
+            launch(PauseMode.BLOCKED, rule, "until:" + window.end)
             return
         }
         val session = Sessions.active(rule.id, now)

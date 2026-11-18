@@ -12,6 +12,21 @@ import java.time.LocalTime
 
 enum class Kind { APP, SITE }
 
+/** A daily stretch of time, in minutes after midnight. It may run past midnight (22:00 to 07:00). */
+data class TimeWindow(val startMin: Int, val endMin: Int) {
+    fun contains(now: LocalTime): Boolean {
+        val m = now.hour * 60 + now.minute
+        return if (startMin <= endMin) m in startMin until endMin else m >= startMin || m < endMin
+    }
+
+    val start: String get() = hhmm(startMin)
+    val end: String get() = hhmm(endMin)
+
+    companion object {
+        fun hhmm(m: Int) = "%02d:%02d".format(m / 60, m % 60)
+    }
+}
+
 /**
  * One app or website and how [pause] treats it.
  * For apps, [id] is the package name; for websites it is the domain, e.g. "reddit.com".
@@ -27,13 +42,17 @@ data class Rule(
     val sessionMin: Int = 0,
     val breatherMin: Int = 0,
     val blocked: Boolean = false,
-    val nightBlock: Boolean = false,
+    val blockTimes: List<TimeWindow> = emptyList(),
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("label", label).put("kind", kind.name)
         .put("pauseSec", pauseSec).put("breathSec", breathSec)
         .put("opensPerDay", opensPerDay).put("sessionMin", sessionMin)
-        .put("breatherMin", breatherMin).put("blocked", blocked).put("nightBlock", nightBlock)
+        .put("breatherMin", breatherMin).put("blocked", blocked)
+        .put("blockTimes", JSONArray().also { a -> blockTimes.forEach { a.put(JSONArray().put(it.startMin).put(it.endMin)) } })
+
+    /** The set time that is blocking right now, if any. */
+    fun blockingWindow(now: LocalTime = LocalTime.now()): TimeWindow? = blockTimes.firstOrNull { it.contains(now) }
 
     companion object {
         fun fromJson(o: JSONObject) = Rule(
@@ -46,7 +65,11 @@ data class Rule(
             sessionMin = o.optInt("sessionMin", 0),
             breatherMin = o.optInt("breatherMin", 0),
             blocked = o.optBoolean("blocked", false),
-            nightBlock = o.optBoolean("nightBlock", false),
+            blockTimes = o.optJSONArray("blockTimes")?.let { a ->
+                (0 until a.length()).mapNotNull { i ->
+                    a.optJSONArray(i)?.let { w -> TimeWindow(w.optInt(0), w.optInt(1)) }
+                }
+            } ?: if (o.optBoolean("nightBlock", false)) listOf(TimeWindow(22 * 60, 7 * 60)) else emptyList(),
         )
     }
 }
@@ -66,10 +89,6 @@ object Store {
     /** Bumped on every change so Compose screens redraw. */
     var version by mutableIntStateOf(0)
         private set
-
-    /** Night blocking runs from 22:00 to 07:00. */
-    val nightStart: LocalTime = LocalTime.of(22, 0)
-    val nightEnd: LocalTime = LocalTime.of(7, 0)
 
     fun init(context: Context) {
         if (!::prefs.isInitialized) {
@@ -135,9 +154,9 @@ object Store {
         get() = prefs.getString("theme", "light") ?: "light"
         set(v) { prefs.edit().putString("theme", v).apply(); changed() }
 
-    /** Dark dots on white for the breathing screen, instead of white on black. */
+    /** Dark dots on soft white for the breathing screen (the default), instead of white on black. */
     var breatheLight: Boolean
-        get() = prefs.getBoolean("breatheLight", false)
+        get() = prefs.getBoolean("breatheLight", true)
         set(v) { prefs.edit().putBoolean("breatheLight", v).apply(); changed() }
 
     /** While now is before this time, [pause] steps aside completely. 0 = not on a break. */
@@ -146,10 +165,6 @@ object Store {
         set(v) { prefs.edit().putLong("breakUntil", v).apply(); changed() }
 
     fun onBreak(now: Long = System.currentTimeMillis()) = breakUntil > now
-
-    fun isNight(now: LocalTime = LocalTime.now()): Boolean =
-        if (nightStart <= nightEnd) now >= nightStart && now < nightEnd
-        else now >= nightStart || now < nightEnd
 
     // ---- daily stats ----
 

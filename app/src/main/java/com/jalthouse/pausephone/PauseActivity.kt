@@ -233,9 +233,9 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         PauseMode.ENTRY -> "opening $label"
         PauseMode.BREATHER -> "a breather along the way"
         PauseMode.SESSION_END -> "your ${rule?.sessionMin?.let(::minutesText) ?: ""} with $label is complete"
-        PauseMode.BLOCKED -> when (req.reason) {
-            "night" -> "$label is resting until ${Store.nightEnd}"
-            "limit" -> "that's all the opens for $label today"
+        PauseMode.BLOCKED -> when {
+            req.reason?.startsWith("until:") == true -> "$label is resting until ${req.reason.removePrefix("until:")}"
+            req.reason == "limit" -> "that's all the opens for $label today"
             else -> "$label is resting"
         }
         PauseMode.UNLOCK -> "welcome back"

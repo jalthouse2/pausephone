@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -41,6 +42,10 @@ import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDefaults
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -80,6 +85,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
+import com.jalthouse.pausephone.data.TimeWindow
 import com.jalthouse.pausephone.service.PauseService
 import com.jalthouse.pausephone.ui.BackHeader
 import com.jalthouse.pausephone.ui.Enso
@@ -104,8 +110,8 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    HOME("Home", Icons.Outlined.Home),
+private enum class Tab(val label: String, val icon: ImageVector?) {
+    HOME("Home", null),
     APPS("Apps", Icons.AutoMirrored.Outlined.List),
     TODAY("Today", Icons.Outlined.DateRange),
     SETTINGS("Settings", Icons.Outlined.Settings),
@@ -199,7 +205,11 @@ private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
                 NavigationBarItem(
                     selected = t == selected,
                     onClick = { onSelect(t) },
-                    icon = { Icon(t.icon, contentDescription = null) },
+                    icon = {
+                        val icon = t.icon
+                        if (icon == null) Enso(24.dp, if (t == selected) Ink.ink else Ink.muted)
+                        else Icon(icon, contentDescription = null)
+                    },
                     label = { Text(t.label, style = Type.small.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium)) },
                     colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = Ink.ink,
@@ -371,7 +381,7 @@ private fun TodayScreen() {
 private fun StatBox(value: String, label: String, modifier: Modifier) {
     Column(
         modifier
-            .background(Ink.panel, RoundedCornerShape(18.dp))
+            .border(1.dp, Ink.line, RoundedCornerShape(18.dp))
             .padding(horizontal = 12.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -508,7 +518,7 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
         }
         ToggleRow(
             "Light breathing screen",
-            "Dark dots on white instead of white dots on black",
+            "Dark dots on soft white. Off: white dots on black.",
             Store.breatheLight,
         ) { Store.breatheLight = it }
 
@@ -716,11 +726,7 @@ private fun RuleScreen(id: String, back: () -> Unit) {
             ) { save(rule.copy(breatherMin = it)) }
 
             Spacer(Modifier.height(8.dp))
-            ToggleRow(
-                "Block at night",
-                "${Store.nightStart} to ${Store.nightEnd}",
-                rule.nightBlock,
-            ) { save(rule.copy(nightBlock = it)) }
+            BlockTimes(rule) { save(rule.copy(blockTimes = it)) }
             ToggleRow(
                 "Block completely",
                 "It stays closed until you turn this off",
@@ -758,4 +764,92 @@ private fun UnlockScreen(back: () -> Unit) {
             ) { Store.unlockBreathSec = it }
         }
     }
+}
+
+// ---------------------------------------------------------------- block at set times
+
+@Composable
+private fun BlockTimes(rule: Rule, onChange: (List<TimeWindow>) -> Unit) {
+    var adding by remember { mutableStateOf(false) }
+    Panel {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Block at set times", style = Type.heading, color = Ink.ink)
+            Text(
+                if (rule.blockTimes.isEmpty()) "Choose hours of the day when ${rule.label} rests, every day."
+                else "${rule.label} rests during these hours, every day.",
+                style = Type.small,
+                color = Ink.muted,
+            )
+            rule.blockTimes.forEachIndexed { i, w ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("${w.start} to ${w.end}", style = Type.body, color = Ink.ink, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onChange(rule.blockTimes.filterIndexed { j, _ -> j != i }) }) {
+                        Text("Remove", style = Type.small, color = Ink.muted)
+                    }
+                }
+            }
+            QuietButton("Add a time", { adding = true }, Modifier.fillMaxWidth().padding(top = 4.dp).height(48.dp))
+        }
+    }
+    if (adding) {
+        AddTimeDialog(
+            onDone = { w ->
+                adding = false
+                if (w != null) onChange(rule.blockTimes + w)
+            },
+        )
+    }
+}
+
+/** Pick a start, then an end. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddTimeDialog(onDone: (TimeWindow?) -> Unit) {
+    var start by remember { mutableStateOf<Int?>(null) }
+    val fromState = rememberTimePickerState(initialHour = 22, initialMinute = 0, is24Hour = true)
+    val untilState = rememberTimePickerState(initialHour = 7, initialMinute = 0, is24Hour = true)
+    val state = if (start == null) fromState else untilState
+    val picking = if (start == null) "From" else "Until"
+    AlertDialog(
+        onDismissRequest = { onDone(null) },
+        containerColor = Ink.paper,
+        title = {
+            Text(
+                if (start == null) "From" else "From ${TimeWindow.hhmm(start!!)} until",
+                style = Type.heading,
+                color = Ink.ink,
+            )
+        },
+        text = {
+            TimePicker(
+                state = state,
+                colors = TimePickerDefaults.colors(
+                    clockDialColor = Ink.tile,
+                    clockDialSelectedContentColor = Ink.paper,
+                    clockDialUnselectedContentColor = Ink.ink,
+                    selectorColor = Ink.ink,
+                    containerColor = Ink.paper,
+                    periodSelectorBorderColor = Ink.track,
+                    timeSelectorSelectedContainerColor = Ink.tile,
+                    timeSelectorUnselectedContainerColor = Ink.paper,
+                    timeSelectorSelectedContentColor = Ink.ink,
+                    timeSelectorUnselectedContentColor = Ink.muted,
+                ),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val m = state.hour * 60 + state.minute
+                val s0 = start
+                if (s0 == null) {
+                    start = m
+                } else if (m != s0) {
+                    onDone(TimeWindow(s0, m))
+                }
+            }) { Text(if (picking == "From") "Next" else "Add", style = Type.button, color = Ink.ink) }
+        },
+        dismissButton = {
+            TextButton(onClick = { onDone(null) }) { Text("Cancel", style = Type.button, color = Ink.muted) }
+        },
+    )
 }

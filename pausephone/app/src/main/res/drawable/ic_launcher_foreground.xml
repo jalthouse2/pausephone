@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ensō with a pause sign, drawn inside the 66dp safe zone of a 108dp adaptive icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <group
+        android:pivotX="100"
+        android:pivotY="100"
+        android:scaleX="0.58"
+        android:scaleY="0.58">
+        <path
+            android:pathData="M161.3,48.6 A80,80 0,1 1,120.7 22.7"
+            android:strokeWidth="14"
+            android:strokeColor="#1C1B19"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M165.8,62 A76,76 0,1 1,74 28.6"
+            android:strokeWidth="7"
+            android:strokeAlpha="0.8"
+            android:strokeColor="#1C1B19"
+            android:strokeLineCap="round" />
+        <path
+            android:fillColor="#1C1B19"
+            android:pathData="M87,78 L90,78 Q94,78 94,82 L94,118 Q94,122 90,122 L87,122 Q83,122 83,118 L83,82 Q83,78 87,78 Z" />
+        <path
+            android:fillColor="#1C1B19"
+            android:pathData="M110,78 L113,78 Q117,78 117,82 L117,118 Q117,122 113,122 L110,122 Q106,122 106,118 L106,82 Q106,78 110,78 Z" />
+    </group>
+</vector>

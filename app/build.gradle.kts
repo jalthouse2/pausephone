@@ -16,7 +16,21 @@ android {
         versionName = "0.1.0"
     }
 
+    // A fixed key so each new build installs over the last one on your phone.
+    // It is only for installing the app yourself; make a private key before publishing anywhere.
+    signingConfigs {
+        create("personal") {
+            storeFile = file("pausephone.keystore")
+            storePassword = "pausephone"
+            keyAlias = "pausephone"
+            keyPassword = "pausephone"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("personal")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))

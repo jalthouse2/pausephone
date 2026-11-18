@@ -17,15 +17,16 @@ An Android app for using your phone on purpose. Before an app or website you've 
 
 Everything stays on the phone. There is no account, no network access and no analytics.
 
-## Build and run
+## Install on your phone
 
-1. Install [Android Studio](https://developer.android.com/studio) (Koala or newer).
-2. **File › Open** and choose this folder. Let Gradle sync; it downloads Gradle 8.7 and the Android libraries the first time.
-3. Plug in an Android phone (Android 8.0 or newer) with USB debugging on, or start an emulator, and press **Run**.
-4. In the app, tap **Begin**, then **Open settings** and turn on **[pause]phone** under Accessibility (on some phones it's under *Downloaded apps* or *Installed services*).
-5. Tap the settings icon, then **Add an app** or **Add a website**, and set its sliders.
+1. On your Android phone, open **https://github.com/jalthouse2/pausephone/releases/latest/download/pausephone.apk**.
+2. Open the downloaded file. If Android asks, allow your browser to install apps.
+3. Open **[pause]phone**, tap **Begin**, then **Open settings** and turn on **[pause]phone** under Accessibility (on some phones it's under *Downloaded apps* or *Installed services*).
+4. Tap the settings icon, then **Add an app** or **Add a website**, and set its sliders.
 
-From the command line: `./gradlew assembleDebug`, then install `app/build/outputs/apk/debug/app-debug.apk`.
+Every push to `main` rebuilds the app on GitHub (see the Actions tab) and replaces the file at that link. To update, download and install it again; your settings stay.
+
+Building it yourself: open the folder in Android Studio and press Run, or `./gradlew assembleDebug`.
 
 ## How it works
 

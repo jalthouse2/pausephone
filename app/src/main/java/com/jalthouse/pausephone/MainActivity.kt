@@ -89,6 +89,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
+import com.jalthouse.pausephone.data.Progress
 import com.jalthouse.pausephone.data.TimeWindow
 import com.jalthouse.pausephone.data.Usage
 import com.jalthouse.pausephone.data.durationText
@@ -357,7 +358,21 @@ private fun TodayScreen() {
 
         val context = LocalContext.current
         var phoneLine by remember { mutableStateOf<String?>(null) }
-        LaunchedEffect(Unit) { phoneLine = withContext(Dispatchers.IO) { Usage.weekSentence(context) } }
+        var firstWeek by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) {
+            withContext(Dispatchers.IO) { Progress.captureBaseline(context) }
+            phoneLine = withContext(Dispatchers.IO) { Usage.weekSentence(context) }
+            firstWeek = withContext(Dispatchers.IO) { Progress.story(context, rules) }
+        }
+        firstWeek?.let { story ->
+            Panel {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(Modifier.size(width = 28.dp, height = 2.dp).background(Ink.ink))
+                    Text("Since you started", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(top = 4.dp))
+                    Text(story, style = Type.body, color = Ink.ink)
+                }
+            }
+        }
         val letter = weekLetter(rules, phoneLine)
         Panel {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
+import com.jalthouse.pausephone.data.Progress
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.data.Usage
 import com.jalthouse.pausephone.data.durationText
@@ -231,6 +232,7 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
     }
     LaunchedEffect(granted) {
         if (granted) {
+            withContext(Dispatchers.IO) { Progress.captureBaseline(context) }
             val s = withContext(Dispatchers.IO) { Usage.lastDays(context, 7) }
             summary = s
             if (s != null && s.pickupsPerDay > 0) {

@@ -13,6 +13,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.jalthouse.pausephone.data.Progress
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.data.Usage
 import com.jalthouse.pausephone.data.weekLetter
@@ -62,7 +63,9 @@ object WeeklyLetter {
                 description = "A few calm sentences about your week"
             },
         )
-        val text = weekLetter(Store.rules(), Usage.weekSentence(context))
+        Progress.captureBaseline(context)
+        val story = Progress.story(context, Store.rules())
+        val text = listOfNotNull(weekLetter(Store.rules(), Usage.weekSentence(context)), story).joinToString(" ")
         val open = PendingIntent.getActivity(
             context,
             0,

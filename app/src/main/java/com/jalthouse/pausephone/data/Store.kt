@@ -215,6 +215,16 @@ object Store {
         get() = prefs.getBoolean("pickupsReal", false)
         set(v) { prefs.edit().putBoolean("pickupsReal", v).apply(); changed() }
 
+    /** When the "before" picture was taken, and what it showed (time per day, overall and per app). */
+    val baselineAt: Long get() = prefs.getLong("baselineAt", 0L)
+    val baselineTotalPerDay: Long get() = prefs.getLong("baselineTotal", 0L)
+    val baselineApps: String get() = prefs.getString("baselineApps", "{}") ?: "{}"
+
+    fun saveBaseline(at: Long, totalPerDay: Long, appsJson: String) {
+        prefs.edit().putLong("baselineAt", at).putLong("baselineTotal", totalPerDay).putString("baselineApps", appsJson).apply()
+        changed()
+    }
+
     /** The pause new apps and sites start with: longer if you said you're rarely present. */
     val defaultPause: Int
         get() = when (presence) {

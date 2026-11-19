@@ -338,8 +338,11 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             color = Ink.mistMuted,
             modifier = Modifier.padding(top = 6.dp).heightIn(min = 20.dp),
         )
+        val intention = Store.sitIntention
         val quote = if (req.mode == PauseMode.LET_GO) {
             Quote("Maybe ${req.reason ?: "step outside"}.", "instead")
+        } else if (sitting && intention.isNotBlank()) {
+            Quote(intention, "your intention")
         } else {
             QUOTES[quoteIndex]
         }
@@ -348,7 +351,14 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
                 .padding(top = 20.dp)
                 .widthIn(max = 320.dp)
                 .heightIn(min = 110.dp)
-                .alpha(if (req.mode == PauseMode.LET_GO) 1f else if (sitting && !sitOver) 0f else quoteAlpha),
+                .alpha(
+                    when {
+                        req.mode == PauseMode.LET_GO -> 1f
+                        sitting && intention.isNotBlank() -> 1f
+                        sitting && !sitOver -> 0f
+                        else -> quoteAlpha
+                    },
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(

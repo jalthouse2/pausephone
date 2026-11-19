@@ -23,6 +23,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -541,9 +543,11 @@ internal fun EditableList(
     items: List<String>,
     addLabel: String,
     placeholder: String,
+    suggestions: List<String> = emptyList(),
     onChange: (List<String>) -> Unit,
 ) {
     var adding by remember { mutableStateOf(false) }
+    val more = suggestions.filter { it !in items }
     Panel {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, style = Type.heading, color = Ink.ink)
@@ -556,7 +560,12 @@ internal fun EditableList(
                     }
                 }
             }
+            if (items.isEmpty()) Text("Nothing here right now. Tap a suggestion below, or write your own.", style = Type.small, color = Ink.muted)
             QuietButton(addLabel, { adding = true }, Modifier.fillMaxWidth().padding(top = 4.dp).height(48.dp))
+            if (more.isNotEmpty()) {
+                Text("Suggestions", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 10.dp))
+                SuggestionChips(more) { onChange(items + it) }
+            }
         }
     }
     if (adding) {
@@ -592,6 +601,25 @@ internal fun EditableList(
                 TextButton(onClick = { adding = false }) { Text("Cancel", style = Type.button, color = Ink.muted) }
             },
         )
+    }
+}
+
+/** Tap a chip to add it. Removed items always come back here, so nothing is gone for good. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SuggestionChips(options: List<String>, onPick: (String) -> Unit) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { option ->
+            Text(
+                "+ $option",
+                style = Type.small.copy(fontSize = 14.sp),
+                color = Ink.ink,
+                modifier = Modifier
+                    .border(1.dp, Ink.track, RoundedCornerShape(18.dp))
+                    .clickable(role = Role.Button) { onPick(option) }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+            )
+        }
     }
 }
 

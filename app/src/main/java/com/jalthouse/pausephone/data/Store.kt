@@ -288,6 +288,25 @@ object Store {
         changed()
     }
 
+    /** Suggestions to choose from; anything removed from a list can be added back from here. */
+    val INTENTION_IDEAS = listOf(
+        "reply to someone", "look something up", "just browsing", "check messages", "post something",
+        "watch one video", "learn something", "rest and unwind", "check the news", "find a recipe",
+    )
+    val INSTEAD_IDEAS = listOf(
+        "stretch for a minute", "step outside", "drink a glass of water", "look out the window",
+        "take three slow breaths", "call someone you love", "read a few pages", "tidy one small thing",
+        "make a cup of tea", "write down what's on your mind", "walk around the block", "put on a song you love",
+        "sit with your eyes closed", "water a plant", "text a friend just to say hi", "look at something far away",
+        "notice five things you can see", "do ten slow squats",
+    )
+    val SIT_INTENTIONS = listOf("calm", "focus", "gratitude", "kindness", "letting go", "rest", "courage", "just be")
+
+    /** An intention to hold while you sit; empty = none. */
+    var sitIntention: String
+        get() = prefs.getString("sitIntention", "") ?: ""
+        set(v) { prefs.edit().putString("sitIntention", v).apply(); changed() }
+
     /** Words you can tap at the pause to say what you're going in for. */
     var intentions: List<String>
         get() = list("intentions", listOf("reply to someone", "look something up", "just browsing"))

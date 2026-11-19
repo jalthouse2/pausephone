@@ -172,6 +172,7 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                         items = Store.intentions,
                         addLabel = "Add a word",
                         placeholder = "check the news",
+                        suggestions = Store.INTENTION_IDEAS,
                     ) { Store.intentions = it }
                     EditableList(
                         title = "Instead",
@@ -179,6 +180,7 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                         items = Store.ideas,
                         addLabel = "Add an idea",
                         placeholder = "call a friend",
+                        suggestions = Store.INSTEAD_IDEAS,
                     ) { Store.ideas = it }
 
                 }

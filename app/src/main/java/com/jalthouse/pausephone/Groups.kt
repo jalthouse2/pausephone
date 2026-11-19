@@ -197,7 +197,13 @@ private fun PickGroupDialog(groups: List<Group>, onPick: (String) -> Unit, onNew
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun NameDialog(title: String, initial: String, onDone: (String?) -> Unit) {
+internal fun NameDialog(
+    title: String,
+    initial: String,
+    ideas: List<String> = NAME_IDEAS,
+    placeholder: String = "Social",
+    onDone: (String?) -> Unit,
+) {
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = { onDone(null) },
@@ -209,7 +215,7 @@ internal fun NameDialog(title: String, initial: String, onDone: (String?) -> Uni
                     value = text,
                     onValueChange = { text = it.take(30) },
                     singleLine = true,
-                    placeholder = { Text("Social", style = Type.body, color = Ink.muted) },
+                    placeholder = { Text(placeholder, style = Type.body, color = Ink.muted) },
                     textStyle = Type.body,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Ink.ink,
@@ -220,7 +226,7 @@ internal fun NameDialog(title: String, initial: String, onDone: (String?) -> Uni
                     ),
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NAME_IDEAS.forEach { idea ->
+                    ideas.forEach { idea ->
                         Text(
                             idea,
                             style = Type.small.copy(fontSize = 14.sp),
@@ -235,7 +241,7 @@ internal fun NameDialog(title: String, initial: String, onDone: (String?) -> Uni
             }
         },
         confirmButton = {
-            TextButton(onClick = { onDone(text.trim().ifBlank { "My group" }) }) {
+            TextButton(onClick = { onDone(text.trim()) }) {
                 Text("Save", style = Type.button, color = Ink.ink)
             }
         },
@@ -283,7 +289,7 @@ internal fun GroupScreen(id: String, go: (Screen) -> Unit, back: () -> Unit) {
     if (renaming) {
         NameDialog("Rename group", g.name) { name ->
             renaming = false
-            if (name != null) Store.saveGroup(g.copy(name = name))
+            if (!name.isNullOrBlank()) Store.saveGroup(g.copy(name = name))
         }
     }
     if (removing) {

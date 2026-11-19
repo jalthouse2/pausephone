@@ -223,7 +223,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         else -> 4
     }
     val pauseSec = when (req.mode) {
-        PauseMode.ENTRY -> rule?.pauseSec ?: 0
+        PauseMode.ENTRY -> rule?.let { (it.pauseSec + Store.growSec * Store.opensToday(it.id)).coerceAtMost(60) } ?: 0
         PauseMode.UNLOCK -> Store.unlockPauseSec
         PauseMode.BREATHER -> kotlin.math.ceil(Breath(breath.toFloat()).cycle).toInt()
         else -> 0

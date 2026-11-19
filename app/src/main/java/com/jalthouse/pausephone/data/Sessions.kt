@@ -12,7 +12,10 @@ class Session(
     val end: Long,
     @Volatile var lastSeen: Long,
     @Volatile var nextBreather: Long,
-)
+) {
+    /** The heads-up before the end has been given. */
+    @Volatile var warned = false
+}
 
 /** Live sessions, shared by the service and the pause screen (same process). */
 object Sessions {

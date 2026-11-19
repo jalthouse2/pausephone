@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 
 enum class Kind { APP, SITE }
@@ -238,6 +239,37 @@ object Store {
         get() = prefs.getBoolean("letterOn", true)
         set(v) { prefs.edit().putBoolean("letterOn", v).apply(); changed() }
 
+    // ---- your day ----
+
+    /** The hour your day starts, for opens and counts: 0 = midnight, up to 6 for night owls. */
+    var dayStartHour: Int
+        get() = prefs.getInt("dayStartHour", 0)
+        set(v) { prefs.edit().putInt("dayStartHour", v).apply(); changed() }
+
+    /** Today, as [pause] counts it: before [dayStartHour] it is still yesterday. */
+    fun logicalToday(): LocalDate = LocalDateTime.now().minusHours(dayStartHour.toLong()).toLocalDate()
+
+    /** When the next day starts, in epoch millis. */
+    fun nextDayStart(): Long = logicalToday().plusDays(1).atTime(dayStartHour, 0)
+        .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+    // ---- protect your choices ----
+
+    /** Seconds added to a pause for every open of that app or site today. 0 = off. */
+    var growSec: Int
+        get() = prefs.getInt("growSec", 0)
+        set(v) { prefs.edit().putInt("growSec", v).apply(); changed() }
+
+    /** Minutes before a session ends to give a quiet heads-up. 0 = none. */
+    var headsUpMin: Int
+        get() = prefs.getInt("headsUpMin", 1)
+        set(v) { prefs.edit().putInt("headsUpMin", v).apply(); changed() }
+
+    /** Seconds of breathing before you can loosen a rule or take a break. 0 = off. */
+    var guardSec: Int
+        get() = prefs.getInt("guardSec", 0)
+        set(v) { prefs.edit().putInt("guardSec", v).apply(); changed() }
+
     // ---- breathing ----
 
     /** A soft tap at the start of each breath in and out. */
@@ -252,9 +284,9 @@ object Store {
 
     // ---- daily stats ----
 
-    private fun dayKey(date: LocalDate = LocalDate.now()) = "stats_$date"
+    private fun dayKey(date: LocalDate = logicalToday()) = "stats_$date"
 
-    private fun dayJson(date: LocalDate = LocalDate.now()): JSONObject =
+    private fun dayJson(date: LocalDate = logicalToday()): JSONObject =
         runCatching { JSONObject(prefs.getString(dayKey(date), "{}")!!) }.getOrDefault(JSONObject())
 
     private fun saveDay(o: JSONObject) {
@@ -287,11 +319,11 @@ object Store {
         )
     }
 
-    fun today(): DayStats = day(LocalDate.now())
+    fun today(): DayStats = day(logicalToday())
 
     /** The last seven days, oldest first, ending today. */
     fun week(): List<Pair<LocalDate, DayStats>> {
-        val today = LocalDate.now()
+        val today = logicalToday()
         return (6 downTo 0).map { today.minusDays(it.toLong()) }.map { it to day(it) }
     }
 

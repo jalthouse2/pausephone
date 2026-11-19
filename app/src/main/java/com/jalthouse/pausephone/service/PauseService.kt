@@ -176,6 +176,11 @@ class PauseService : AccessibilityService() {
         val session = Sessions.get(id) ?: return
         val now = System.currentTimeMillis()
         session.lastSeen = now
+        val headsUp = Store.headsUpMin * 60_000L
+        if (headsUp > 0 && session.end > 0 && !session.warned && now >= session.end - headsUp && now < session.end) {
+            session.warned = true
+            HeadsUp.post(this, rule.label, Store.headsUpMin)
+        }
         when {
             session.end in 1..now -> {
                 Sessions.end(id)

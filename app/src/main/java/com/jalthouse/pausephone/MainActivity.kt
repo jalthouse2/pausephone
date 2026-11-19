@@ -192,8 +192,10 @@ private fun ColumnScope.Main(
                         onPicked = { id -> stack.removeAt(stack.lastIndex); go(Screen.RuleEdit(id)) },
                         back = back,
                     )
-                    is Screen.Choose -> ChooseScreen(top.sites, onDone = back, back = back)
-                    is Screen.RuleEdit -> RuleScreen(top.id, back)
+                    is Screen.Choose -> Guarded("Changing your apps and sites?", back) {
+                        ChooseScreen(top.sites, onDone = back, back = back)
+                    }
+                    is Screen.RuleEdit -> Guarded("Changing a rule?", back) { RuleScreen(top.id, back) }
                 }
             } else {
                 when (tab) {
@@ -530,6 +532,23 @@ private fun AppsScreen(go: (Screen) -> Unit) {
 @Composable
 private fun SettingsScreen(go: (Screen) -> Unit) {
     watchStore()
+    var pending by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
+    val p = pending
+    if (p != null) {
+        BreathGate(p.first, onPass = { p.second(); pending = null }, onCancel = { pending = null })
+    } else {
+        SettingsList(go) { reason, action -> if (Store.guardSec > 0) pending = reason to action else action() }
+    }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = Type.title.copy(fontSize = 20.sp, lineHeight = 26.sp), color = Ink.ink, modifier = Modifier.padding(top = 18.dp))
+}
+
+/** Settings, grouped. [guard] runs an action that loosens your rules, after a breath if that's on. */
+@Composable
+private fun SettingsList(go: (Screen) -> Unit, guard: (String, () -> Unit) -> Unit) {
     val context = LocalContext.current
     val enabled = rememberServiceEnabled()
 
@@ -562,16 +581,18 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
                 } else {
                     Text("Set [pause] aside for a while. Your rules come back on their own.", style = Type.small, color = Ink.muted)
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        QuietButton("1 hour", { Store.breakUntil = System.currentTimeMillis() + 3_600_000L }, Modifier.weight(1f))
+                        QuietButton("1 hour", {
+                            guard("Taking a break?") { Store.breakUntil = System.currentTimeMillis() + 3_600_000L }
+                        }, Modifier.weight(1f))
                         QuietButton("Until tomorrow", {
-                            val tomorrow = LocalDate.now().plusDays(1).atStartOfDay(ZoneId.systemDefault())
-                            Store.breakUntil = tomorrow.toInstant().toEpochMilli()
+                            guard("Taking a break?") { Store.breakUntil = Store.nextDayStart() }
                         }, Modifier.weight(1f))
                     }
                 }
             }
         }
 
+        SectionTitle("Your pauses")
         Panel(Modifier.clickable(role = Role.Button) { go(Screen.Unlock) }) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("Unlock pause", style = Type.heading, color = Ink.ink)
@@ -582,34 +603,24 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
                 )
             }
         }
+        StepSlider(
+            "Pauses grow", "Each open adds this much to the next pause that day",
+            listOf(0, 1, 2, 3, 5), Store.growSec, { if (it == 0) "off" else "+$it s per open" },
+        ) { v -> if (v < Store.growSec) guard("Making pauses shorter?") { Store.growSec = v } else Store.growSec = v }
+        StepSlider(
+            "A heads-up before a session ends", "A quiet notice and a soft tap",
+            listOf(0, 1, 2, 5), Store.headsUpMin, { if (it == 0) "none" else "$it min before" },
+        ) { Store.headsUpMin = it }
+        StepSlider(
+            "Your day starts at", "When opens and counts start again. Later is kinder to night owls.",
+            (0..6).toList(), Store.dayStartHour, { if (it == 0) "midnight" else "%02d:00".format(it) },
+        ) { Store.dayStartHour = it }
+        StepSlider(
+            "Breathe before loosening a rule", "Before changing a rule, choosing apps, or taking a break",
+            listOf(0, 10, 20, 30, 60), Store.guardSec, { if (it == 0) "off" else "$it s" },
+        ) { v -> if (v < Store.guardSec) guard("Making it easier to change your rules?") { Store.guardSec = v } else Store.guardSec = v }
 
-        Panel {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Appearance", style = Type.heading, color = Ink.ink)
-                Choice(
-                    options = listOf("light" to "Light", "dark" to "Black"),
-                    selected = Store.theme,
-                    onSelect = { Store.theme = it },
-                )
-            }
-        }
-        ToggleRow(
-            "Light breathing screen",
-            "Dark dots on soft white. Off: white dots on black.",
-            Store.breatheLight,
-        ) { Store.breatheLight = it }
-
-        ToggleRow(
-            "Breath you can feel",
-            "A soft tap as each breath in and out begins",
-            Store.breathVibration,
-        ) { Store.breathVibration = it }
-        ToggleRow(
-            "A bell at the rest",
-            "A quiet bell as the dots settle into the ensō. Silent when your phone is on silent.",
-            Store.restBell,
-        ) { Store.restBell = it }
-
+        SectionTitle("At the pause")
         EditableList(
             title = "Going in to…",
             subtitle = "Words you can tap at the pause to say what you're going in for.",
@@ -625,6 +636,34 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             placeholder = "call a friend",
         ) { Store.ideas = it }
 
+        SectionTitle("Breathing")
+        ToggleRow(
+            "Breath you can feel",
+            "A soft tap as each breath in and out begins",
+            Store.breathVibration,
+        ) { Store.breathVibration = it }
+        ToggleRow(
+            "A bell at the rest",
+            "A quiet bell as the dots settle into the ensō. Silent when your phone is on silent.",
+            Store.restBell,
+        ) { Store.restBell = it }
+        ToggleRow(
+            "Light breathing screen",
+            "Dark dots on soft white. Off: white dots on black.",
+            Store.breatheLight,
+        ) { Store.breatheLight = it }
+
+        SectionTitle("Look and letters")
+        Panel {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Appearance", style = Type.heading, color = Ink.ink)
+                Choice(
+                    options = listOf("light" to "Light", "dark" to "Black"),
+                    selected = Store.theme,
+                    onSelect = { Store.theme = it },
+                )
+            }
+        }
         val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             Store.letterOn = granted
             WeeklyLetter.schedule(context)
@@ -638,6 +677,7 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             }
         }
 
+        SectionTitle("About")
         Panel(
             Modifier.clickable(role = Role.Button) {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TIP_URL)))
@@ -648,12 +688,10 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
                 Text("[pause] is free. If it helps you, you can leave a tip.", style = Type.small, color = Ink.muted)
             }
         }
-
         Panel {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("About", style = Type.heading, color = Ink.ink)
                 Text(
-                    "Nothing leaves your phone. No account, no tracking, no ads.",
+                    "Nothing leaves your phone. No account, no tracking, no ads, and no streaks to keep.",
                     style = Type.small,
                     color = Ink.muted,
                 )

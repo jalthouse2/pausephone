@@ -88,7 +88,10 @@ object WeeklyLetter {
 class LetterReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> WeeklyLetter.schedule(context)
+            Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                WeeklyLetter.schedule(context)
+                DailyIntention.schedule(context)
+            }
             else -> WeeklyLetter.post(context)
         }
     }

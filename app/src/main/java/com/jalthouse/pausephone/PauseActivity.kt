@@ -343,6 +343,8 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             Quote("Maybe ${req.reason ?: "step outside"}.", "instead")
         } else if (sitting && intention.isNotBlank()) {
             Quote(intention, "your intention")
+        } else if ((req.mode == PauseMode.ENTRY || req.mode == PauseMode.UNLOCK) && Store.todayIntention() != null) {
+            Quote(Store.todayIntention()!!, "your intention today")
         } else {
             QUOTES[quoteIndex]
         }
@@ -355,6 +357,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
                     when {
                         req.mode == PauseMode.LET_GO -> 1f
                         sitting && intention.isNotBlank() -> 1f
+                        (req.mode == PauseMode.ENTRY || req.mode == PauseMode.UNLOCK) && Store.todayIntention() != null -> 1f
                         sitting && !sitOver -> 0f
                         else -> quoteAlpha
                     },

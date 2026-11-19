@@ -45,7 +45,7 @@ private val PARTS = listOf(
     Triple("pauses", "Your pauses", "Unlock pause, pauses that grow, heads-up, when your day starts"),
     Triple("atpause", "At the pause", "Going in to…, and things to do instead"),
     Triple("breathing", "Breathing", "Taps, the bell, light or dark breathing screen"),
-    Triple("look", "Look and letters", "Light or black, the Sunday letter"),
+    Triple("look", "Look, mornings and letters", "Light or black, a morning intention, the Sunday letter"),
     Triple("about", "About", "Privacy, a coffee, bugs and ideas, the introduction"),
 )
 
@@ -216,6 +216,29 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                         Store.letterOn = granted
                         WeeklyLetter.schedule(context)
+                    }
+                    val askForMorning = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                        Store.intentionReminder = granted
+                        DailyIntention.schedule(context)
+                    }
+                    ToggleRow("A morning intention", "Each morning: would you like to set an intention for today?", Store.intentionReminder) { on ->
+                        if (on && Build.VERSION.SDK_INT >= 33) {
+                            askForMorning.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            Store.intentionReminder = on
+                            DailyIntention.schedule(context)
+                        }
+                    }
+                    if (Store.intentionReminder) {
+                        val times = (12..22).map { it * 30 } // 06:00 to 11:00
+                        StepSlider(
+                            "When it comes", "Every morning at",
+                            times, times.minByOrNull { kotlin.math.abs(it - Store.intentionTime) } ?: 510,
+                            { "%02d:%02d".format(it / 60, it % 60) },
+                        ) {
+                            Store.intentionTime = it
+                            DailyIntention.schedule(context)
+                        }
                     }
                     ToggleRow("A letter on Sundays", "A few calm sentences about your week, at 10:00", Store.letterOn) { on ->
                         if (on && Build.VERSION.SDK_INT >= 33) {

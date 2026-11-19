@@ -136,13 +136,26 @@ internal sealed interface Screen {
     data class SettingsPart(val part: String) : Screen
     data object Breakdown : Screen
     data object Sit : Screen
+    data object Intention : Screen
 }
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** Set when the morning notification is tapped: open "Today's intention". */
+        var openIntention by mutableStateOf(false)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(DailyIntention.EXTRA_OPEN, false)) openIntention = true
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
         WeeklyLetter.schedule(this)
+        DailyIntention.schedule(this)
+        if (intent?.getBooleanExtra(DailyIntention.EXTRA_OPEN, false) == true) openIntention = true
         setContent {
             watchStore()
             Ink.dark = Store.theme == "dark"
@@ -167,6 +180,12 @@ private fun App() {
     val stack = remember { mutableStateListOf<Screen>() }
     val go: (Screen) -> Unit = { stack.add(it) }
     val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
+    if (MainActivity.openIntention && Store.welcomeDone) {
+        LaunchedEffect(Unit) {
+            MainActivity.openIntention = false
+            if (stack.lastOrNull() != Screen.Intention) stack.add(Screen.Intention)
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(Ink.paper).systemBarsPadding()) {
         if (!Store.welcomeDone) {
@@ -201,6 +220,7 @@ private fun ColumnScope.Main(
                     is Screen.SettingsPart -> SettingsPartScreen(top.part, go, back)
                     Screen.Breakdown -> BreakdownScreen(back)
                     Screen.Sit -> SitScreen(back)
+                    Screen.Intention -> IntentionScreen(back)
                 }
             } else {
                 when (tab) {
@@ -305,6 +325,14 @@ private fun HomeScreen(go: (Screen) -> Unit) {
             color = Ink.muted,
             modifier = Modifier.padding(top = 20.dp),
         )
+        val todays = Store.todayIntention()
+        TextButton(onClick = { go(Screen.Intention) }, modifier = Modifier.padding(top = 16.dp)) {
+            Text(
+                if (todays != null) "today · $todays" else "set an intention for today",
+                style = if (todays != null) Type.body.copy(fontSize = 17.sp, fontWeight = FontWeight.Light) else Type.small,
+                color = if (todays != null) Ink.ink else Ink.muted,
+            )
+        }
         Spacer(Modifier.weight(1f))
         when {
             !enabled -> TextButton(onClick = { openAccessibility(context) }) {

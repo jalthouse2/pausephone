@@ -302,6 +302,29 @@ object Store {
     )
     val SIT_INTENTIONS = listOf("calm", "focus", "gratitude", "kindness", "letting go", "rest", "courage", "just be")
 
+    /** Today's intention, set in the morning; null when none for today. */
+    fun todayIntention(): String? {
+        val day = prefs.getString("dayIntentionDate", null) ?: return null
+        return if (day == logicalToday().toString()) prefs.getString("dayIntention", null)?.takeIf { it.isNotBlank() } else null
+    }
+
+    fun setTodayIntention(text: String) {
+        prefs.edit().putString("dayIntention", text.trim()).putString("dayIntentionDate", logicalToday().toString()).apply()
+        changed()
+    }
+
+    /** A morning notification asking for an intention for the day. */
+    var intentionReminder: Boolean
+        get() = prefs.getBoolean("intentionReminder", true)
+        set(v) { prefs.edit().putBoolean("intentionReminder", v).apply(); changed() }
+
+    /** When it comes, in minutes after midnight. */
+    var intentionTime: Int
+        get() = prefs.getInt("intentionTime", 8 * 60 + 30)
+        set(v) { prefs.edit().putInt("intentionTime", v).apply(); changed() }
+
+    val DAY_INTENTIONS = listOf("calm", "focus", "gratitude", "kindness", "patience", "presence", "rest", "play")
+
     /** An intention to hold while you sit; empty = none. */
     var sitIntention: String
         get() = prefs.getString("sitIntention", "") ?: ""

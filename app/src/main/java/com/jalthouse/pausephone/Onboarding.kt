@@ -54,9 +54,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
+import com.jalthouse.pausephone.data.Usage
+import com.jalthouse.pausephone.data.durationText
 import com.jalthouse.pausephone.ui.Breath
 import com.jalthouse.pausephone.ui.DotCloud
 import com.jalthouse.pausephone.ui.Enso
@@ -215,31 +218,106 @@ private fun ColumnScope.Question(
 
 // 4 -----------------------------------------------------------------
 
+/** Your real numbers from the phone, if you allow it; otherwise a guess. */
 @Composable
 private fun ColumnScope.Pickups(next: () -> Unit) {
-    Heading(
-        "How many times a day do you think you pick it up?",
-        "A guess is fine. Most people guess low.",
-    )
-    Spacer(Modifier.height(36.dp))
-    StepSlider(
-        "Pickups a day", "Each unlock, each glance that turns into a scroll",
-        PICKUPS, Store.pickupsGuess.let { g -> PICKUPS.minByOrNull { kotlin.math.abs(it - g) } ?: 60 },
-        { if (it == PICKUPS.last()) "$it or more" else "about $it" },
-    ) { Store.pickupsGuess = it }
-    Spacer(Modifier.weight(1f))
-    PrimaryButton("Continue", next, Modifier.fillMaxWidth())
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(Usage.granted(context)) }
+    var guessing by remember { mutableStateOf(false) }
+    var summary by remember { mutableStateOf<Usage.Summary?>(null) }
+    LifecycleResumeEffect(Unit) {
+        granted = Usage.granted(context)
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(granted) {
+        if (granted) {
+            val s = withContext(Dispatchers.IO) { Usage.lastDays(context, 7) }
+            summary = s
+            if (s != null && s.pickupsPerDay > 0) {
+                Store.pickupsGuess = s.pickupsPerDay
+                Store.pickupsReal = true
+            }
+            if (s != null) Store.usageMsPerDay = s.msPerDay
+        }
+    }
+    val s = summary
+    when {
+        granted && s != null -> {
+            Heading("Here's your last week.", "From your phone's own count. It stays on your phone.")
+            Column(Modifier.weight(1f).padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                BigNumber("${s.pickupsPerDay}", "pickups a day")
+                BigNumber(durationText(s.msPerDay), "on your phone each day")
+                if (s.perApp.isNotEmpty()) {
+                    Text("Where the time went", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(top = 8.dp))
+                    s.perApp.take(3).forEach { (pkg, ms) ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(Usage.label(context, pkg), style = Type.body, color = Ink.ink, modifier = Modifier.weight(1f))
+                            Text(durationText(ms / s.days) + " a day", style = Type.body.copy(fontSize = 15.sp), color = Ink.muted)
+                        }
+                    }
+                }
+            }
+            PrimaryButton("Continue", next, Modifier.fillMaxWidth())
+        }
+        granted -> {
+            Heading("Looking at your week…")
+            Spacer(Modifier.weight(1f))
+        }
+        guessing -> {
+            Heading("How many times a day do you think you pick it up?", "A guess is fine. Most people guess low.")
+            Spacer(Modifier.height(36.dp))
+            StepSlider(
+                "Pickups a day", "Each unlock, each glance that turns into a scroll",
+                PICKUPS, Store.pickupsGuess.let { g -> PICKUPS.minByOrNull { kotlin.math.abs(it - g) } ?: 60 },
+                { if (it == PICKUPS.last()) "$it or more" else "about $it" },
+            ) { Store.pickupsGuess = it; Store.pickupsReal = false }
+            Spacer(Modifier.weight(1f))
+            PrimaryButton("Continue", next, Modifier.fillMaxWidth())
+        }
+        else -> {
+            Heading(
+                "Let's look at your real day.",
+                "Your phone already counts how often you pick it up and how long you spend in each app. " +
+                    "With your OK, [pause] can show you those numbers. They never leave your phone.",
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                "In the list that opens, find [pause] and turn on Usage access, then come back.",
+                style = Type.small,
+                color = Ink.muted,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            PrimaryButton("Show my numbers", { Usage.openSettings(context) }, Modifier.fillMaxWidth())
+            QuietButton("I'd rather guess", { guessing = true }, Modifier.fillMaxWidth().padding(top = 10.dp))
+        }
+    }
+}
+
+@Composable
+private fun BigNumber(value: String, label: String) {
+    Column(
+        Modifier.fillMaxWidth().border(1.dp, Ink.line, RoundedCornerShape(18.dp)).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(value, style = Type.stat.copy(fontSize = 34.sp), color = Ink.ink)
+        Text(label, style = Type.small.copy(fontSize = 14.sp), color = Ink.muted)
+    }
 }
 
 // 5 -----------------------------------------------------------------
 
-/** One dot for every pickup you guessed: your own day, drawn. */
+/** One dot for every pickup: your own day, drawn. */
 @Composable
 private fun ColumnScope.YourDay(next: () -> Unit) {
     val n = Store.pickupsGuess
     val week = n * 7
     val year = n * 365
-    Heading("This is your day.", "Each dot is one time you pick up your phone.")
+    val real = Store.pickupsReal
+    Heading(
+        "This is your day.",
+        if (real) "Each dot is one time you pick up your phone, on an average day last week."
+        else "Each dot is one time you pick up your phone.",
+    )
     val dotColor = Ink.ink
     Canvas(Modifier.fillMaxWidth().padding(top = 28.dp).aspectRatio(1.6f)) {
         val cols = 15
@@ -253,9 +331,12 @@ private fun ColumnScope.YourDay(next: () -> Unit) {
             drawCircle(dotColor, r, Offset(cx, cy))
         }
     }
+    val hours = Store.usageMsPerDay / 3_600_000.0
+    val daysAYear = (Store.usageMsPerDay * 365 / 86_400_000L).toInt()
     Text(
         "That's about $week times a week, and more than ${"%,d".format(year)} times a year. " +
-            "Each one is a moment you could choose.",
+            (if (hours >= 1) "At this pace, your phone takes about $daysAYear full days of your year. " else "") +
+            "Each pickup is a moment you could choose.",
         style = Type.body,
         color = Ink.ink,
         modifier = Modifier.padding(top = 20.dp),
@@ -301,15 +382,28 @@ private fun ColumnScope.FirstApps(next: () -> Unit) {
     var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
     var showAll by remember { mutableStateOf(false) }
     val chosen = remember { mutableStateListOf<String>().apply { addAll(Store.rules().map { it.id }) } }
-    LaunchedEffect(Unit) { apps = withContext(Dispatchers.IO) { loadApps(context) } }
+    var usage by remember { mutableStateOf<Usage.Summary?>(null) }
+    LaunchedEffect(Unit) {
+        apps = withContext(Dispatchers.IO) { loadApps(context) }
+        usage = withContext(Dispatchers.IO) { Usage.lastDays(context, 7) }
+    }
 
-    Heading("Which apps pull you in?", "Choose a few to start. You can change this any time.")
+    Heading(
+        "Which apps pull you in?",
+        if (usage?.perApp?.isNotEmpty() == true) "Your most-used apps are first. Choose a few to start; you can change this any time."
+        else "Choose a few to start. You can change this any time.",
+    )
     val list = apps
     Column(Modifier.weight(1f).padding(top = 16.dp).verticalScroll(rememberScrollState())) {
         if (list == null) {
             Text("Finding your apps…", style = Type.small, color = Ink.muted)
         } else {
-            val usual = list.filter { it.pkg in USUAL_SUSPECTS }
+            val used = usage?.perApp?.map { it.first }.orEmpty()
+            val usual = if (used.isNotEmpty()) {
+                used.mapNotNull { pkg -> list.find { it.pkg == pkg } }.take(8)
+            } else {
+                list.filter { it.pkg in USUAL_SUSPECTS }
+            }
             val shown = if (showAll || usual.isEmpty()) list else usual
             shown.forEach { app ->
                 val on = app.pkg in chosen
@@ -323,7 +417,12 @@ private fun ColumnScope.FirstApps(next: () -> Unit) {
                 ) {
                     if (app.icon != null) Image(app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
                     else LetterTile(app.label)
-                    Text(app.label, style = Type.body, color = Ink.ink, modifier = Modifier.weight(1f))
+                    Column(Modifier.weight(1f)) {
+                        Text(app.label, style = Type.body, color = Ink.ink)
+                        val ms = usage?.perApp?.find { it.first == app.pkg }?.second
+                        val days = usage?.days ?: 1
+                        if (ms != null) Text(durationText(ms / days) + " a day", style = Type.small, color = Ink.muted)
+                    }
                     Box(
                         Modifier
                             .size(24.dp)

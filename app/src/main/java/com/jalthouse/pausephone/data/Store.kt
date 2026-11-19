@@ -205,6 +205,16 @@ object Store {
         get() = prefs.getInt("pickupsGuess", 60)
         set(v) { prefs.edit().putInt("pickupsGuess", v).apply(); changed() }
 
+    /** Time on the phone per day, from Usage access during the introduction. 0 = not known. */
+    var usageMsPerDay: Long
+        get() = prefs.getLong("usageMsPerDay", 0L)
+        set(v) { prefs.edit().putLong("usageMsPerDay", v).apply(); changed() }
+
+    /** True when [pickupsGuess] came from the phone's own count rather than a guess. */
+    var pickupsReal: Boolean
+        get() = prefs.getBoolean("pickupsReal", false)
+        set(v) { prefs.edit().putBoolean("pickupsReal", v).apply(); changed() }
+
     /** The pause new apps and sites start with: longer if you said you're rarely present. */
     val defaultPause: Int
         get() = when (presence) {

@@ -90,6 +90,8 @@ import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.data.TimeWindow
+import com.jalthouse.pausephone.data.Usage
+import com.jalthouse.pausephone.data.durationText
 import com.jalthouse.pausephone.data.weekLetter
 import com.jalthouse.pausephone.service.PauseService
 import com.jalthouse.pausephone.ui.BackHeader
@@ -333,6 +335,8 @@ private fun TodayScreen() {
             Text(day, style = Type.body.copy(fontSize = 15.sp), color = Ink.muted)
         }
 
+        PhoneToday()
+
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatBox("${stats.wentIn}", "went in", Modifier.weight(1f))
             StatBox("${stats.letGo}", "let it go", Modifier.weight(1f))
@@ -351,7 +355,10 @@ private fun TodayScreen() {
             }
         }
 
-        val letter = weekLetter(rules)
+        val context = LocalContext.current
+        var phoneLine by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(Unit) { phoneLine = withContext(Dispatchers.IO) { Usage.weekSentence(context) } }
+        val letter = weekLetter(rules, phoneLine)
         Panel {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -375,6 +382,54 @@ private fun TodayScreen() {
                     else -> "${(r.opensPerDay - (stats.opens[r.id] ?: 0)).coerceAtLeast(0)} of ${r.opensPerDay}"
                 }
                 ListRow(r.label, null, { LetterTile(r.label) }, null, trailing, divider = i < rules.lastIndex)
+            }
+        }
+    }
+}
+
+/** Today's screen time and pickups from the phone's own count, shown quietly. */
+@Composable
+private fun PhoneToday() {
+    val context = LocalContext.current
+    var granted by remember { mutableStateOf(Usage.granted(context)) }
+    var today by remember { mutableStateOf<Usage.Summary?>(null) }
+    var tick by remember { mutableStateOf(0) }
+    LifecycleResumeEffect(Unit) {
+        granted = Usage.granted(context)
+        tick++
+        onPauseOrDispose { }
+    }
+    LaunchedEffect(granted, tick) {
+        today = if (granted) withContext(Dispatchers.IO) { Usage.today(context) } else null
+    }
+    val t = today
+    if (!granted) {
+        Panel(Modifier.clickable(role = Role.Button) { Usage.openSettings(context) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("See your screen time here", style = Type.heading, color = Ink.ink)
+                Text(
+                    "Turn on Usage access for [pause] to see today's time and pickups, from your phone's own count.",
+                    style = Type.small,
+                    color = Ink.muted,
+                )
+            }
+        }
+    } else if (t != null) {
+        Panel {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("On your phone today", style = Type.heading, color = Ink.ink)
+                Text(
+                    "${durationText(t.totalMs)} · ${t.pickups} ${if (t.pickups == 1) "pickup" else "pickups"}",
+                    style = Type.stat.copy(fontSize = 22.sp),
+                    color = Ink.ink,
+                )
+                t.perApp.firstOrNull()?.let { (pkg, ms) ->
+                    Text(
+                        "Most of it in ${Usage.label(context, pkg)}, ${durationText(ms)}.",
+                        style = Type.small,
+                        color = Ink.muted,
+                    )
+                }
             }
         }
     }

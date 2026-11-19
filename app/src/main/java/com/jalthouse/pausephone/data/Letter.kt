@@ -6,10 +6,12 @@ import java.util.Locale
 internal fun times(n: Int) = if (n == 1) "once" else if (n == 2) "twice" else "$n times"
 
 /** A few calm sentences about the last seven days. No scores, no streaks. */
-fun weekLetter(rules: List<Rule>): String {
+fun weekLetter(rules: List<Rule>, phoneLine: String? = null): String {
     val week = Store.week()
     val pauses = week.sumOf { it.second.pauses }
-    if (pauses == 0) return "Your week starts here. There's nothing to tell yet, and that's fine."
+    if (pauses == 0) {
+        return listOfNotNull("Your week starts here. There's nothing to tell yet, and that's fine.", phoneLine).joinToString(" ")
+    }
     val letGo = week.sumOf { it.second.letGo }
     val breathers = week.sumOf { it.second.breathers }
     val lines = mutableListOf<String>()
@@ -27,6 +29,7 @@ fun weekLetter(rules: List<Rule>): String {
         lines += "Your quietest day was ${quiet.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())}."
     }
     if (breathers > 0) lines += "You took ${if (breathers == 1) "a breather" else "$breathers breathers"} along the way."
+    if (phoneLine != null) lines += phoneLine
     return lines.joinToString(" ")
 }
 

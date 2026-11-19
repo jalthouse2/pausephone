@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.jalthouse.pausephone.data.Store
+import com.jalthouse.pausephone.data.Usage
 import com.jalthouse.pausephone.data.weekLetter
 import java.time.DayOfWeek
 import java.time.LocalDateTime
@@ -61,7 +62,7 @@ object WeeklyLetter {
                 description = "A few calm sentences about your week"
             },
         )
-        val text = weekLetter(Store.rules())
+        val text = weekLetter(Store.rules(), Usage.weekSentence(context))
         val open = PendingIntent.getActivity(
             context,
             0,

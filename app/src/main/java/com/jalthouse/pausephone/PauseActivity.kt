@@ -222,8 +222,8 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     val breath = when {
         rule != null -> rule.breathSec
         req.mode == PauseMode.UNLOCK -> Store.unlockBreathSec
-        req.minutes > 0 -> Store.sitBreath
-        else -> 4
+        req.mode == PauseMode.FREE -> Store.sitBreath
+        else -> 5
     }
     val pauseSec = when (req.mode) {
         PauseMode.ENTRY -> rule?.let { (it.pauseSec + Store.growSec * Store.opensToday(it.id)).coerceAtMost(60) } ?: 0

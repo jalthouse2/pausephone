@@ -45,11 +45,11 @@ internal fun SitScreen(back: () -> Unit) {
     watchStore()
     val context = LocalContext.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp)) {
-        BackHeader("Sit and breathe", back)
+        BackHeader("Breathing session", back)
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Box(Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) { Enso(120.dp) }
             Text(
-                "The dots breathe with you. When the time is up, a singing bowl sounds.",
+                "Sit for a while. The dots breathe with you, and a singing bowl sounds when the time is up.",
                 style = Type.body,
                 color = Ink.muted,
             )

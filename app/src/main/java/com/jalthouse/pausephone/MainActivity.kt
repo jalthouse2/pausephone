@@ -315,14 +315,17 @@ private fun HomeScreen(go: (Screen) -> Unit) {
                 indication = null,
                 role = Role.Button,
                 onClickLabel = "Breathe",
-            ) { go(Screen.Sit) },
+            ) { context.startActivity(PauseActivity.launchIntent(context, PauseMode.FREE, null)) },
         ) { Enso(168.dp) }
         Text(
-            "tap to sit and breathe",
+            "tap to breathe",
             style = Type.small,
             color = Ink.muted,
             modifier = Modifier.padding(top = 20.dp),
         )
+        TextButton(onClick = { go(Screen.Sit) }, modifier = Modifier.padding(top = 4.dp)) {
+            Text("Breathing session", style = Type.body.copy(fontSize = 15.sp), color = Ink.ink)
+        }
         val todays = Store.todayIntention()
         TextButton(onClick = { go(Screen.Intention) }, modifier = Modifier.padding(top = 16.dp)) {
             Text(

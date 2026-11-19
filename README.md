@@ -38,7 +38,7 @@ Building it yourself: open the folder in Android Studio and press Run, or `./gra
 | Part | File |
 | --- | --- |
 | Rules, settings and daily counts (SharedPreferences) | `data/Store.kt` |
-| Open sessions and the 2-minute grace period | `data/Sessions.kt` |
+| Open sessions (kept on the phone) | `data/Sessions.kt` |
 | Quotes under the breathing | `data/Quotes.kt` |
 | Watches the foreground app and browser address bar | `service/PauseService.kt` |
 | The breathing screen (all modes) | `PauseActivity.kt` |
@@ -48,7 +48,7 @@ Building it yourself: open the folder in Android Studio and press Run, or `./gra
 
 Android has no public way to intercept an app launch, so [pause] uses an **accessibility service**. When the app in front changes to one with a rule, the service opens the breathing screen on top of it. "Open" closes the breathing screen and reveals the app underneath; "Never mind" goes to the home screen. For websites, the service reads the address bar of supported browsers: Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.
 
-If you leave an app and come back within 2 minutes, it's the same session and doesn't count as a new open.
+Inside a session (say 3 hours of YouTube) you can leave and come back as often as you like: it never counts as a new open. With no session length, leaving for more than 2 minutes ends the session.
 
 ## Known limits
 

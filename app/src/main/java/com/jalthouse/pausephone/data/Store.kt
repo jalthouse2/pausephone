@@ -396,6 +396,11 @@ object Store {
         get() = prefs.getBoolean("letterOn", true)
         set(v) { prefs.edit().putBoolean("letterOn", v).apply(); changed() }
 
+    // ---- open sessions (no redraw needed) ----
+
+    fun sessionsJson(): String = prefs.getString("sessions", "[]") ?: "[]"
+    fun saveSessionsJson(json: String) { prefs.edit().putString("sessions", json).apply() }
+
     // ---- your day ----
 
     /** The hour your day starts, for opens and counts: 0 = midnight, up to 6 for night owls. */

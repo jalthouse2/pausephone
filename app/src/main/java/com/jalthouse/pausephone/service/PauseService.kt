@@ -175,7 +175,13 @@ class PauseService : AccessibilityService() {
         }
         val session = Sessions.active(rule.id, now)
         if (session != null) {
+            // Back inside an open session: no pause, no new open. If you were away a while,
+            // the next breather counts from now, so it doesn't greet you at the door.
+            if (rule.breatherMin > 0 && now - session.lastSeen > Sessions.GRACE_MS) {
+                session.nextBreather = now + rule.breatherMin * 60_000L
+            }
             session.lastSeen = now
+            Sessions.save()
             currentId = rule.id
             return
         }
@@ -214,6 +220,7 @@ class PauseService : AccessibilityService() {
         val headsUp = Store.headsUpMin * 60_000L
         if (headsUp > 0 && session.end > 0 && !session.warned && now >= session.end - headsUp && now < session.end) {
             session.warned = true
+            Sessions.save()
             HeadsUp.post(this, rule.label, Store.headsUpMin)
         }
         when {
@@ -224,6 +231,7 @@ class PauseService : AccessibilityService() {
             }
             session.nextBreather in 1..now -> {
                 session.nextBreather = now + rule.breatherMin * 60_000L
+                Sessions.save()
                 launch(PauseMode.BREATHER, rule)
             }
         }

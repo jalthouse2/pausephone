@@ -256,7 +256,7 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
     val s = summary
     when {
         granted && s != null -> {
-            Heading("Here's your last week.", guessLine(s.msPerDay) ?: "From your phone's own count. It stays on your phone.")
+            Heading("Here's your last week.", "From your phone's own count. It stays on your phone.")
             Column(
                 Modifier.weight(1f).padding(top = 24.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -280,7 +280,7 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
             Spacer(Modifier.weight(1f))
         }
         else -> {
-            Heading("How many times a day do you think you pick it up?", "A guess is fine. Most people guess low.")
+            Heading("How many times a day do you think you pick it up?", "A guess is fine.")
             Spacer(Modifier.height(36.dp))
             StepSlider(
                 "Pickups a day", "Each unlock, each glance that turns into a scroll",
@@ -290,17 +290,6 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
             Spacer(Modifier.weight(1f))
             PrimaryButton("Continue", next, Modifier.fillMaxWidth())
         }
-    }
-}
-
-/** How your guess compares with what the phone counted. Never a scolding, just the two side by side. */
-private fun guessLine(realMs: Long): String? {
-    val g = GUESSES.find { it.min == Store.timeGuessMin } ?: return null
-    val realMin = realMs / 60_000L
-    return when {
-        realMin > g.high -> "You guessed ${g.said}. Your phone says ${durationText(realMs)} a day. Most people guess low."
-        realMin < g.low -> "You guessed ${g.said}. Your phone says ${durationText(realMs)} a day, a little less than you thought."
-        else -> "You guessed ${g.said}, and your phone agrees: ${durationText(realMs)} a day."
     }
 }
 

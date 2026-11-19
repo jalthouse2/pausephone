@@ -44,8 +44,10 @@ import com.jalthouse.pausephone.ui.Type
 private val PARTS = listOf(
     Triple("pauses", "Your pauses", "Unlock pause, pauses that grow, heads-up, when your day starts"),
     Triple("atpause", "At the pause", "Going in to…, and things to do instead"),
-    Triple("breathing", "Breathing", "Taps, the bell, light or dark breathing screen"),
-    Triple("look", "Look, mornings and letters", "Light or black, a morning intention, the Sunday letter"),
+    Triple("breathing", "Breathing", "A tap with each breath, a bell at the rest"),
+    Triple("appearance", "Appearance", "Light or black, and the breathing screen"),
+    Triple("intention", "Morning intention", "A question each morning, and today's intention"),
+    Triple("letter", "Sunday letter", "A few calm sentences about your week"),
     Triple("about", "About", "Privacy, a coffee, bugs and ideas, the introduction"),
 )
 
@@ -195,17 +197,11 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                         "A quiet bell as the dots settle into the ensō. Silent when your phone is on silent.",
                         Store.restBell,
                     ) { Store.restBell = it }
-                    ToggleRow(
-                        "Light breathing screen",
-                        "Dark dots on soft white. Off: white dots on black.",
-                        Store.breatheLight,
-                    ) { Store.breatheLight = it }
-
                 }
-                "look" -> {
+                "appearance" -> {
                     Panel {
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text("Appearance", style = Type.heading, color = Ink.ink)
+                            Text("The app", style = Type.heading, color = Ink.ink)
                             Choice(
                                 options = listOf("light" to "Light", "dark" to "Black"),
                                 selected = Store.theme,
@@ -213,15 +209,18 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                             )
                         }
                     }
-                    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-                        Store.letterOn = granted
-                        WeeklyLetter.schedule(context)
-                    }
+                    ToggleRow(
+                        "Light breathing screen",
+                        "Dark dots on soft white. Off: white dots on black.",
+                        Store.breatheLight,
+                    ) { Store.breatheLight = it }
+                }
+                "intention" -> {
                     val askForMorning = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
                         Store.intentionReminder = granted
                         DailyIntention.schedule(context)
                     }
-                    ToggleRow("A morning intention", "Each morning: would you like to set an intention for today?", Store.intentionReminder) { on ->
+                    ToggleRow("Ask me each morning", "Would you like to set an intention for today?", Store.intentionReminder) { on ->
                         if (on && Build.VERSION.SDK_INT >= 33) {
                             askForMorning.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else {
@@ -240,6 +239,13 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                             DailyIntention.schedule(context)
                         }
                     }
+                    QuietButton("Set today's intention", { go(Screen.Intention) }, Modifier.fillMaxWidth())
+                }
+                "letter" -> {
+                    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+                        Store.letterOn = granted
+                        WeeklyLetter.schedule(context)
+                    }
                     ToggleRow("A letter on Sundays", "A few calm sentences about your week, at 10:00", Store.letterOn) { on ->
                         if (on && Build.VERSION.SDK_INT >= 33) {
                             askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -248,7 +254,6 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                             WeeklyLetter.schedule(context)
                         }
                     }
-
                 }
                 else -> {
                     Panel(

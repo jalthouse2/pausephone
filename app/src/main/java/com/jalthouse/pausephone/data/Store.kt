@@ -336,6 +336,11 @@ object Store {
         get() = prefs.getString("sitIntention", "") ?: ""
         set(v) { prefs.edit().putString("sitIntention", v).apply(); changed() }
 
+    /** Show the "going in to…" words at the pause. Off by default, to keep the pause quiet. */
+    var askIntent: Boolean
+        get() = prefs.getBoolean("askIntent", false)
+        set(v) { prefs.edit().putBoolean("askIntent", v).apply(); changed() }
+
     /** Words you can tap at the pause to say what you're going in for. */
     var intentions: List<String>
         get() = list("intentions", listOf("reply to someone", "look something up", "just browsing"))

@@ -51,7 +51,7 @@ private val ABOUT = listOf(
 
 private val PARTS = listOf(
     Triple("pauses", "Your pauses", "Unlock pause, pauses that grow, heads-up, when your day starts"),
-    Triple("atpause", "At the pause", "Going in to…, and things to do instead"),
+    Triple("atpause", "At the pause", "Things to do instead, and an optional \"going in to…\""),
     Triple("breathing", "Breathing", "A tap with each breath, a bell at the rest"),
     Triple("appearance", "Appearance", "Light or black, and the breathing screen"),
     Triple("intention", "Morning intention", "A question each morning, and today's intention"),
@@ -179,14 +179,21 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
 
                 }
                 "atpause" -> {
-                    EditableList(
-                        title = "Going in to…",
-                        subtitle = "Words you can tap at the pause to say what you're going in for.",
-                        items = Store.intentions,
-                        addLabel = "Add a word",
-                        placeholder = "check the news",
-                        suggestions = Store.INTENTION_IDEAS,
-                    ) { Store.intentions = it }
+                    ToggleRow(
+                        "Ask what I'm going in for",
+                        "A few words to tap at the pause, like \"reply to someone\". Off keeps the pause quiet.",
+                        Store.askIntent,
+                    ) { Store.askIntent = it }
+                    if (Store.askIntent) {
+                        EditableList(
+                            title = "Going in to…",
+                            subtitle = "Words you can tap at the pause to say what you're going in for.",
+                            items = Store.intentions,
+                            addLabel = "Add a word",
+                            placeholder = "check the news",
+                            suggestions = Store.INTENTION_IDEAS,
+                        ) { Store.intentions = it }
+                    }
                     EditableList(
                         title = "Instead",
                         subtitle = "After \"Not now\", [pause] suggests one of these.",

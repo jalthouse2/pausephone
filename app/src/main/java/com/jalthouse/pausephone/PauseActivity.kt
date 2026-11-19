@@ -395,7 +395,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         }
 
         val intentions = Store.intentions
-        if (req.mode == PauseMode.ENTRY && !waiting && intentions.isNotEmpty()) {
+        if (req.mode == PauseMode.ENTRY && !waiting && Store.askIntent && intentions.isNotEmpty()) {
             Text("going in to…", style = Type.small, color = Ink.mistMuted, modifier = Modifier.padding(bottom = 8.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),

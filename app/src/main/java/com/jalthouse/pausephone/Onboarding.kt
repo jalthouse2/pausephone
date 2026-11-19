@@ -1,6 +1,8 @@
 package com.jalthouse.pausephone
 
 import android.Manifest
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -81,9 +83,20 @@ private const val PAGES = 10
 
 private val PICKUPS = listOf(10, 20, 30, 40, 50, 60, 80, 100, 120, 150)
 
+/** The answers to "how much time do you think you spend?": minutes stored, label, and the range it covers. */
+private class Guess(val min: Int, val label: String, val said: String, val low: Int, val high: Int)
+
+private val GUESSES = listOf(
+    Guess(30, "Less than an hour", "less than an hour", 0, 60),
+    Guess(120, "1 to 3 hours", "1 to 3 hours", 60, 180),
+    Guess(240, "3 to 5 hours", "3 to 5 hours", 180, 300),
+    Guess(360, "5 to 7 hours", "5 to 7 hours", 300, 420),
+    Guess(480, "More than 7 hours", "more than 7 hours", 420, 24 * 60),
+)
+
 /**
- * The introduction, ten quiet pages: three questions, what your answers add up to,
- * why [pause] exists, your first apps, one breath, the one permission, and that it's free.
+ * The introduction, ten quiet pages: two questions, the permissions and why, your real week,
+ * what it adds up to, why [pause] exists, your first apps, one breath, and that it's free.
  */
 @Composable
 fun Onboarding(onDone: () -> Unit) {
@@ -109,17 +122,21 @@ fun Onboarding(onDone: () -> Unit) {
                         Store.presence,
                     ) { Store.presence = it; next() }
                     2 -> Question(
-                        "Do you usually know why you opened it?",
-                        null,
-                        listOf("yes" to "Yes, mostly", "sometimes" to "Sometimes", "no" to "I often end up somewhere I didn't mean to be"),
-                        null,
-                    ) { next() }
-                    3 -> Pickups(next)
-                    4 -> YourDay(next)
-                    5 -> WhyPause(next)
-                    6 -> FirstApps(next)
-                    7 -> OneBreath(next)
-                    8 -> Permission(next)
+                        "How much time do you think you spend on your phone each day?",
+                        "A guess is fine. In a moment we can look at the real number.",
+                        GUESSES.map { it.min.toString() to it.label },
+                        Store.timeGuessMin.takeIf { it > 0 }?.toString(),
+                    ) {
+                        Store.timeGuessMin = it.toInt()
+                        if (!Store.pickupsReal) Store.usageMsPerDay = it.toLong() * 60_000L
+                        next()
+                    }
+                    3 -> Permissions(next)
+                    4 -> Pickups(next)
+                    5 -> YourDay(next)
+                    6 -> WhyPause(next)
+                    7 -> FirstApps(next)
+                    8 -> OneBreath(next)
                     else -> Free(onDone)
                 }
             }
@@ -217,7 +234,7 @@ private fun ColumnScope.Question(
 private fun ColumnScope.Pickups(next: () -> Unit) {
     val context = LocalContext.current
     var granted by remember { mutableStateOf(Usage.granted(context)) }
-    var guessing by remember { mutableStateOf(false) }
+    var loaded by remember { mutableStateOf(false) }
     var summary by remember { mutableStateOf<Usage.Summary?>(null) }
     LifecycleResumeEffect(Unit) {
         granted = Usage.granted(context)
@@ -232,14 +249,18 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
                 Store.pickupsGuess = s.pickupsPerDay
                 Store.pickupsReal = true
             }
-            if (s != null) Store.usageMsPerDay = s.msPerDay
+            if (s != null && s.msPerDay > 0) Store.usageMsPerDay = s.msPerDay
+            loaded = true
         }
     }
     val s = summary
     when {
         granted && s != null -> {
-            Heading("Here's your last week.", "From your phone's own count. It stays on your phone.")
-            Column(Modifier.weight(1f).padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Heading("Here's your last week.", guessLine(s.msPerDay) ?: "From your phone's own count. It stays on your phone.")
+            Column(
+                Modifier.weight(1f).padding(top = 24.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
                 BigNumber("${s.pickupsPerDay}", "pickups a day")
                 BigNumber(durationText(s.msPerDay), "on your phone each day")
                 if (s.perApp.isNotEmpty()) {
@@ -254,11 +275,11 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
             }
             PrimaryButton("Continue", next, Modifier.fillMaxWidth())
         }
-        granted -> {
+        granted && !loaded -> {
             Heading("Looking at your week…")
             Spacer(Modifier.weight(1f))
         }
-        guessing -> {
+        else -> {
             Heading("How many times a day do you think you pick it up?", "A guess is fine. Most people guess low.")
             Spacer(Modifier.height(36.dp))
             StepSlider(
@@ -269,22 +290,17 @@ private fun ColumnScope.Pickups(next: () -> Unit) {
             Spacer(Modifier.weight(1f))
             PrimaryButton("Continue", next, Modifier.fillMaxWidth())
         }
-        else -> {
-            Heading(
-                "Let's look at your real day.",
-                "Your phone already counts how often you pick it up and how long you spend in each app. " +
-                    "With your OK, [pause] can show you those numbers. They never leave your phone.",
-            )
-            Spacer(Modifier.weight(1f))
-            Text(
-                "In the list that opens, find [pause] and turn on Usage access, then come back.",
-                style = Type.small,
-                color = Ink.muted,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
-            PrimaryButton("Show my numbers", { Usage.openSettings(context) }, Modifier.fillMaxWidth())
-            QuietButton("I'd rather guess", { guessing = true }, Modifier.fillMaxWidth().padding(top = 10.dp))
-        }
+    }
+}
+
+/** How your guess compares with what the phone counted. Never a scolding, just the two side by side. */
+private fun guessLine(realMs: Long): String? {
+    val g = GUESSES.find { it.min == Store.timeGuessMin } ?: return null
+    val realMin = realMs / 60_000L
+    return when {
+        realMin > g.high -> "You guessed ${g.said}. Your phone says ${durationText(realMs)} a day. Most people guess low."
+        realMin < g.low -> "You guessed ${g.said}. Your phone says ${durationText(realMs)} a day, a little less than you thought."
+        else -> "You guessed ${g.said}, and your phone agrees: ${durationText(realMs)} a day."
     }
 }
 
@@ -314,30 +330,45 @@ private fun ColumnScope.YourDay(next: () -> Unit) {
         else "Each dot is one time you pick up your phone.",
     )
     val dotColor = Ink.ink
-    Canvas(Modifier.fillMaxWidth().padding(top = 28.dp).aspectRatio(1.6f)) {
-        val cols = 15
-        val rows = (n + cols - 1) / cols
-        val gapX = size.width / cols
-        val gapY = (size.height / maxOf(rows, 1)).coerceAtMost(gapX)
-        val r = (minOf(gapX, gapY) * 0.22f).coerceAtMost(6.dp.toPx())
-        for (i in 0 until n) {
-            val cx = gapX * (i % cols) + gapX / 2
-            val cy = gapY * (i / cols) + gapY / 2
-            drawCircle(dotColor, r, Offset(cx, cy))
+    val ms = Store.usageMsPerDay
+    val daysAYear = (ms * 365 / 86_400_000L).toInt()
+    val quarter = ms / 4
+    val daysBack = (quarter * 365 / 86_400_000L).toInt()
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Canvas(Modifier.fillMaxWidth().padding(top = 24.dp).aspectRatio(2.2f)) {
+            val cols = 15
+            val rows = (n + cols - 1) / cols
+            val gapX = size.width / cols
+            val gapY = (size.height / maxOf(rows, 1)).coerceAtMost(gapX)
+            val r = (minOf(gapX, gapY) * 0.22f).coerceAtMost(6.dp.toPx())
+            for (i in 0 until n) {
+                val cx = gapX * (i % cols) + gapX / 2
+                val cy = gapY * (i / cols) + gapY / 2
+                drawCircle(dotColor, r, Offset(cx, cy))
+            }
         }
+        Text(
+            "That's about $week times a week, and more than ${"%,d".format(year)} times a year.",
+            style = Type.body,
+            color = Ink.ink,
+            modifier = Modifier.padding(top = 16.dp, bottom = 16.dp),
+        )
+        if (daysAYear >= 1) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                BigNumber("$daysAYear days", "of your year on your phone, at ${durationText(ms)} a day" + if (Store.pickupsReal) "" else " (your guess)")
+                if (daysBack >= 1) {
+                    BigNumber("$daysBack days", "back each year, if you took back a quarter of it: ${durationText(quarter)} a day")
+                }
+            }
+        }
+        Text(
+            "Not every minute on the phone is lost. The ones you choose are yours. [pause] helps with the rest.",
+            style = Type.body,
+            color = Ink.muted,
+            modifier = Modifier.padding(top = 16.dp),
+        )
     }
-    val hours = Store.usageMsPerDay / 3_600_000.0
-    val daysAYear = (Store.usageMsPerDay * 365 / 86_400_000L).toInt()
-    Text(
-        "That's about $week times a week, and more than ${"%,d".format(year)} times a year. " +
-            (if (hours >= 1) "At this pace, your phone takes about $daysAYear full days of your year. " else "") +
-            "Each pickup is a moment you could choose.",
-        style = Type.body,
-        color = Ink.ink,
-        modifier = Modifier.padding(top = 20.dp),
-    )
-    Spacer(Modifier.weight(1f))
-    PrimaryButton("Continue", next, Modifier.fillMaxWidth())
+    PrimaryButton("Continue", next, Modifier.fillMaxWidth().padding(top = 12.dp))
 }
 
 // 6 -----------------------------------------------------------------
@@ -475,45 +506,76 @@ private fun ColumnScope.OneBreath(next: () -> Unit) {
     PrimaryButton("Continue", next, Modifier.fillMaxWidth())
 }
 
-// 9 -----------------------------------------------------------------
+// 4 (permissions) ----------------------------------------------------
 
+/** Each permission on its own switch, with the one reason it's needed. Every switch reflects the real state. */
 @Composable
-private fun ColumnScope.Permission(next: () -> Unit) {
+private fun ColumnScope.Permissions(next: () -> Unit) {
     val context = LocalContext.current
-    val enabled = rememberServiceEnabled()
+    val service = rememberServiceEnabled()
+    var usage by remember { mutableStateOf(Usage.granted(context)) }
+    var reminders by remember { mutableStateOf(remindersOn(context)) }
+    LifecycleResumeEffect(Unit) {
+        usage = Usage.granted(context)
+        reminders = remindersOn(context)
+        onPauseOrDispose { }
+    }
     val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        Store.letterOn = granted
-        WeeklyLetter.schedule(context)
+        setReminders(context, granted)
+        reminders = remindersOn(context)
     }
     Heading(
-        "One permission, and why.",
-        "To pause before an app, [pause] needs to notice when that app opens. Android calls this Accessibility. " +
-            "[pause] only looks at which app is in front and the address bar of your browser. Nothing leaves your phone.",
+        "To help, [pause] needs your OK.",
+        "Each switch has one reason. Everything stays on your phone, and you can change any of them later.",
     )
-    Spacer(Modifier.height(24.dp))
-    if (enabled) {
-        Text("It's on. Thank you.", style = Type.heading, color = Ink.ink)
-    } else {
-        QuietButton("Open Accessibility settings", { openAccessibility(context) }, Modifier.fillMaxWidth())
-        Text(
-            "Find [pause] in the list and switch it on. If it's greyed out, open Settings › Apps › [pause], " +
-                "tap ⋮ and choose Allow restricted settings.",
-            style = Type.small,
-            color = Ink.muted,
-            modifier = Modifier.padding(top = 10.dp),
-        )
-    }
-    Spacer(Modifier.height(20.dp))
-    ToggleRow("A letter on Sundays", "A few calm sentences about your week", Store.letterOn) { on ->
-        if (on && Build.VERSION.SDK_INT >= 33) {
-            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
-            Store.letterOn = on
-            WeeklyLetter.schedule(context)
+    Column(
+        Modifier.weight(1f).padding(top = 24.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        ToggleRow(
+            "Screen time",
+            "So [pause] can show you your real day: pickups, time, and which apps.",
+            usage,
+        ) { Usage.openSettings(context) }
+        ToggleRow(
+            "Pause before apps",
+            "So [pause] notices when an app you chose opens. Android calls this Accessibility.",
+            service,
+        ) { openAccessibility(context) }
+        ToggleRow(
+            "Gentle reminders",
+            "A morning intention and a Sunday letter. Nothing else.",
+            reminders,
+        ) { on ->
+            val allowed = context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true
+            if (on && !allowed && Build.VERSION.SDK_INT >= 33) {
+                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                setReminders(context, on)
+                reminders = remindersOn(context)
+            }
+        }
+        if (!service) {
+            Text(
+                "In the list that opens, find [pause] and switch it on. If it's greyed out, open Settings › Apps › [pause], " +
+                    "tap ⋮ and choose Allow restricted settings.",
+                style = Type.small,
+                color = Ink.muted,
+            )
         }
     }
-    Spacer(Modifier.weight(1f))
-    PrimaryButton(if (enabled) "Continue" else "I'll do it later", next, Modifier.fillMaxWidth())
+    PrimaryButton(if (usage && service) "Continue" else "Continue for now", next, Modifier.fillMaxWidth().padding(top = 12.dp))
+}
+
+private fun remindersOn(context: Context): Boolean =
+    context.getSystemService(NotificationManager::class.java)?.areNotificationsEnabled() == true &&
+        (Store.letterOn || Store.intentionReminder)
+
+private fun setReminders(context: Context, on: Boolean) {
+    Store.letterOn = on
+    Store.intentionReminder = on
+    WeeklyLetter.schedule(context)
+    DailyIntention.schedule(context)
 }
 
 // 10 ----------------------------------------------------------------

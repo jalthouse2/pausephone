@@ -374,6 +374,11 @@ object Store {
         get() = prefs.getLong("usageMsPerDay", 0L)
         set(v) { prefs.edit().putLong("usageMsPerDay", v).apply(); changed() }
 
+    /** How many minutes a day you guessed you spend on your phone, in the introduction (0 = no guess). */
+    var timeGuessMin: Int
+        get() = prefs.getInt("timeGuessMin", 0)
+        set(v) { prefs.edit().putInt("timeGuessMin", v).apply(); changed() }
+
     /** True when [pickupsGuess] came from the phone's own count rather than a guess. */
     var pickupsReal: Boolean
         get() = prefs.getBoolean("pickupsReal", false)

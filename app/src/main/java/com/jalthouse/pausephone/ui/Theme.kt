@@ -39,6 +39,10 @@ object Ink {
     val ink: Color get() = pick(0xFF1C1B19, 0xFFF4F4F2)     // text and marks
     val muted: Color get() = pick(0xFF5C5C58, 0xFFA3A39E)   // supporting text
 
+    val okBg: Color get() = pick(0xFFF3EEDF, 0xFF2A2720)    // "all set": soft cream
+    val alertBg: Color get() = pick(0xFFF7E1DC, 0xFF3A2422) // "not working": soft red
+    val alertInk: Color get() = pick(0xFF7A2A20, 0xFFF2C4BB) // text on soft red
+
     val night: Color get() = breathe(0xFF161614, 0xFFF5F5F2)     // breathing screen
     val mist: Color get() = breathe(0xFFF4F4F2, 0xFF1C1B19)      // dots and text on it
     val mistMuted: Color get() = breathe(0xFFA3A39E, 0xFF5C5C58) // supporting text on it

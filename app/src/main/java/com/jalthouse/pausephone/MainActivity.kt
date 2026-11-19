@@ -471,7 +471,10 @@ private fun StatBox(value: String, label: String, modifier: Modifier) {
 
 internal const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
 
-/** "Is it working?": what [pause] can see right now, in plain words. */
+/**
+ * One status panel: soft red while [pause] can't work (Accessibility off, or Android has
+ * stopped it), cream when all is set, with what it last noticed and decided.
+ */
 @Composable
 internal fun HealthCheck(enabled: Boolean) {
     val context = LocalContext.current
@@ -483,28 +486,48 @@ internal fun HealthCheck(enabled: Boolean) {
         }
     }
     val running = PauseService.running
+    val ok = enabled && running
     val last = PauseService.lastPackage
     // Reading tick redraws this every 1.5 s.
     val ago = if (tick >= 0) (System.currentTimeMillis() - PauseService.lastSeenAt) / 1000 else 0L
-    val lines = buildList {
-        add(
-            when {
-                !enabled -> "Accessibility is off for [pause], so it can't see your apps yet."
-                !running -> "Accessibility is on, but Android isn't running [pause] right now. Turn it off and on again in Accessibility settings. If this keeps happening, set [pause] to Unrestricted in its battery settings."
-                else -> "[pause] is on and running."
-            },
-        )
-        if (running && last != null) {
-            add("The last app it noticed was ${Usage.label(context, last)}, ${if (ago < 60) "$ago s" else "${ago / 60} min"} ago.")
-        }
-        PauseService.lastDecision?.let { add("Last decision: $it.") }
-        if (Store.onBreak()) add("You're on a break, so there are no pauses until it ends.")
+    val title = when {
+        !enabled -> "[pause] isn't on yet"
+        !running -> "[pause] has stopped"
+        else -> "All set"
     }
-    Panel(Modifier.clickable(role = Role.Button) { if (!enabled || !running) openAccessibility(context) }) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("Is it working?", style = Type.heading, color = Ink.ink)
-            lines.forEach { Text(it, style = Type.small, color = Ink.muted) }
+    val lines = buildList {
+        when {
+            !enabled -> {
+                add("It needs Accessibility to notice when you open an app or site. Tap here, find [pause], and switch it on.")
+                add("If the switch is greyed out: Settings › Apps › [pause] › ⋮ › Allow restricted settings.")
+            }
+            !running -> {
+                add("Accessibility is on, but Android isn't running [pause] right now. Tap here and switch it off and on again.")
+                add("If this keeps happening, set [pause] to Unrestricted in its battery settings.")
+            }
+            else -> {
+                add("[pause] is on and running. Your pauses are good to go.")
+                if (last != null) {
+                    add("The last app it noticed was ${Usage.label(context, last)}, ${if (ago < 60) "$ago s" else "${ago / 60} min"} ago.")
+                }
+                PauseService.lastDecision?.let { add("Last decision: $it.") }
+            }
         }
+        if (Store.onBreak()) add("You're on a break until ${clock(Store.breakUntil)}, so there are no pauses until then.")
+        if (ok && !Usage.granted(context)) add("Usage access is off, so screen time won't show. That's optional.")
+    }
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(if (ok) Ink.okBg else Ink.alertBg, shape)
+            .then(if (!ok) Modifier.clickable(role = Role.Button) { openAccessibility(context) } else Modifier)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(title, style = Type.heading, color = if (ok) Ink.ink else Ink.alertInk)
+        lines.forEach { Text(it, style = Type.small, color = if (ok) Ink.muted else Ink.alertInk) }
+        if (!ok) Text("Tap to turn it on", style = Type.body.copy(fontSize = 15.sp), color = Ink.alertInk, modifier = Modifier.padding(top = 6.dp))
     }
 }
 

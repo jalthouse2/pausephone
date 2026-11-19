@@ -77,18 +77,6 @@ private fun SettingsMain(go: (Screen) -> Unit, guard: (String, () -> Unit) -> Un
     ) {
         TabTitle("Settings")
 
-        Panel(Modifier.clickable(role = Role.Button) { openAccessibility(context) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Accessibility", style = Type.heading, color = Ink.ink)
-                Text(
-                    if (enabled) "On. [pause] can step in before your apps and sites."
-                    else "Off. Tap to turn on [pause] so it can step in before your apps and sites.",
-                    style = Type.small,
-                    color = Ink.muted,
-                )
-            }
-        }
-
         HealthCheck(enabled)
 
         Panel {

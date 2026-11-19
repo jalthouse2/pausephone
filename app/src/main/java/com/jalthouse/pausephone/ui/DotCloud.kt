@@ -1,7 +1,5 @@
 package com.jalthouse.pausephone.ui
 
-import android.graphics.Matrix
-import android.graphics.Region
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -9,8 +7,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.vector.PathParser
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -90,10 +86,18 @@ private class Dots(n: Int, seed: Int) {
             phase[i] = r.nextFloat() * 6.28f
             wobble[i] = 0.5f + r.nextFloat() * 1.5f
         }
-        // Points inside the brush ensō and the pause bars.
-        val barCount = (n * 0.08f).toInt()
-        val ring = sample(ENSO_PATH, n - barCount, r)
-        val bars = sample(PAUSE_PATH, barCount, r)
+        // Places in your brush ensō, weighted by its ink. The pause bars are the points near
+        // the middle; the dots closest to the centre of the cloud go there.
+        val pool = android.util.Base64.decode(ENSO_POINTS, android.util.Base64.DEFAULT)
+        val all = (0 until pool.size / 2).map { k ->
+            (pool[2 * k].toInt() and 0xFF) * 200f / 256f to (pool[2 * k + 1].toInt() and 0xFF) * 200f / 256f
+        }.shuffled(r)
+        val isBar: (Pair<Float, Float>) -> Boolean = { (x, y) -> (x - 100f) * (x - 100f) + (y - 100f) * (y - 100f) < 55f * 55f }
+        val barPool = all.filter(isBar)
+        val ringPool = all.filterNot(isBar)
+        val barCount = (n * barPool.size.toFloat() / all.size.coerceAtLeast(1)).toInt()
+        val bars = List(barCount) { barPool[it % barPool.size.coerceAtLeast(1)] }
+        val ring = List(n - barCount) { ringPool[it % ringPool.size.coerceAtLeast(1)] }
         // Inner dots go to the pause bars; the rest go round the ensō in angle order,
         // so each dot travels roughly straight in and out.
         val byRadius = (0 until n).sortedBy { radius[it] }
@@ -110,23 +114,6 @@ private class Dots(n: Int, seed: Int) {
 
     private fun normalise(a: Float): Float = atan2(sin(a), cos(a))
 
-    private fun sample(pathData: String, count: Int, r: Random): List<Pair<Float, Float>> {
-        if (count <= 0) return emptyList()
-        val k = 4f
-        val path = PathParser().parsePathString(pathData).toPath().asAndroidPath()
-        path.fillType = android.graphics.Path.FillType.EVEN_ODD
-        path.transform(Matrix().apply { setScale(k, k) })
-        val region = Region().apply { setPath(path, Region(0, 0, (200 * k).toInt(), (200 * k).toInt())) }
-        val bounds = region.bounds
-        val out = ArrayList<Pair<Float, Float>>(count)
-        var guard = 0
-        while (out.size < count && guard++ < count * 80) {
-            val x = bounds.left + r.nextFloat() * bounds.width()
-            val y = bounds.top + r.nextFloat() * bounds.height()
-            if (region.contains(x.toInt(), y.toInt())) out.add(x / k to y / k)
-        }
-        return out
-    }
 }
 
 /**
@@ -150,7 +137,7 @@ fun DotCloud(
         val cx = size.width / 2f
         val cy = size.height / 2f
         val born = (el / 1.2f).coerceAtMost(1f)
-        val k = 1.9f
+        val k = 1.55f
         for (i in 0 until count) {
             val s = breath.spread(el - dots.lag[i] * breath.inOut)
             val w = sin(el * dots.wobble[i] + dots.phase[i]) * (0.6f + 3.4f * s)

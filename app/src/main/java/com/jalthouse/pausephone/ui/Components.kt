@@ -44,6 +44,10 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.res.painterResource
+import com.jalthouse.pausephone.R
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
@@ -59,25 +63,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 
-/** The brush ensō with a pause sign. */
+/** Your brush ensō with the pause sign, in any ink colour. */
 @Composable
 fun Enso(size: Dp, color: Color = Ink.ink) {
-    val paths = remember {
-        val enso = PathParser().parsePathString(ENSO_PATH).toPath().apply { fillType = PathFillType.EvenOdd }
-        val bars = PathParser().parsePathString(PAUSE_PATH).toPath()
-        enso to bars
-    }
-    Canvas(
-        Modifier
-            .size(size)
-            .semantics { contentDescription = "[pause]" },
-    ) {
-        val k = this.size.minDimension / 200f
-        scale(k, k, pivot = Offset.Zero) {
-            drawPath(paths.first, color)
-            drawPath(paths.second, color)
-        }
-    }
+    Image(
+        painter = painterResource(R.drawable.enso_brush),
+        contentDescription = "[pause]",
+        colorFilter = ColorFilter.tint(color),
+        modifier = Modifier.size(size),
+    )
 }
 
 @Composable

@@ -73,7 +73,7 @@ object WeeklyLetter {
             PendingIntent.FLAG_IMMUTABLE,
         )
         val n = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_pause)
             .setContentTitle("Your week")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))

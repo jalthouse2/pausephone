@@ -33,7 +33,7 @@ object HeadsUp {
         )
         val text = if (minutes == 1) "One minute left with $label." else "$minutes minutes left with $label."
         val n = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_pause)
             .setContentTitle("Almost time")
             .setContentText(text)
             .setTimeoutAfter(minutes * 60_000L)

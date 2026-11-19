@@ -126,11 +126,13 @@ private enum class Tab(val label: String, val icon: ImageVector?) {
 }
 
 /** Screens that open on top of a tab. */
-private sealed interface Screen {
+internal sealed interface Screen {
     data object Unlock : Screen
-    data object AddApp : Screen
-    data class Choose(val sites: Boolean) : Screen
-    data class RuleEdit(val id: String) : Screen
+    data class GroupEdit(val id: String) : Screen
+    data class GroupPart(val id: String, val part: String) : Screen
+    data class Choose(val groupId: String, val sites: Boolean) : Screen
+    data class SettingsPart(val part: String) : Screen
+    data object Breakdown : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -188,20 +190,19 @@ private fun ColumnScope.Main(
             if (top != null) {
                 when (top) {
                     Screen.Unlock -> UnlockScreen(back)
-                    Screen.AddApp -> AddAppScreen(
-                        onPicked = { id -> stack.removeAt(stack.lastIndex); go(Screen.RuleEdit(id)) },
-                        back = back,
-                    )
                     is Screen.Choose -> Guarded("Changing your apps and sites?", back) {
-                        ChooseScreen(top.sites, onDone = back, back = back)
+                        ChooseScreen(top.groupId, top.sites, onDone = back, back = back)
                     }
-                    is Screen.RuleEdit -> Guarded("Changing a rule?", back) { RuleScreen(top.id, back) }
+                    is Screen.GroupEdit -> GroupScreen(top.id, go, back)
+                    is Screen.GroupPart -> Guarded("Changing a rule?", back) { GroupPartScreen(top.id, top.part, back) }
+                    is Screen.SettingsPart -> SettingsPartScreen(top.part, go, back)
+                    Screen.Breakdown -> BreakdownScreen(back)
                 }
             } else {
                 when (tab) {
                     Tab.HOME -> HomeScreen()
-                    Tab.APPS -> AppsScreen(go)
-                    Tab.TODAY -> TodayScreen()
+                    Tab.APPS -> GroupsScreen(go)
+                    Tab.TODAY -> TodayScreen(go)
                     Tab.SETTINGS -> SettingsScreen(go)
                 }
             }
@@ -239,14 +240,14 @@ private fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
 
 /** Reading the store's version makes the calling screen redraw whenever the store changes. */
 @Composable
-private fun watchStore(): Int = Store.version
+internal fun watchStore(): Int = Store.version
 
 @Composable
-private fun TabTitle(text: String) {
+internal fun TabTitle(text: String) {
     Text(text, style = Type.title, color = Ink.ink, modifier = Modifier.padding(top = 20.dp, bottom = 12.dp))
 }
 
-private fun serviceEnabled(context: Context): Boolean {
+internal fun serviceEnabled(context: Context): Boolean {
     val enabled = Settings.Secure.getString(
         context.contentResolver,
         Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
@@ -269,7 +270,7 @@ internal fun rememberServiceEnabled(): Boolean {
 internal fun openAccessibility(context: Context) =
     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
-private fun clock(millis: Long): String =
+internal fun clock(millis: Long): String =
     LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("HH:mm"))
 
@@ -317,7 +318,7 @@ private fun HomeScreen() {
 // ---------------------------------------------------------------- today
 
 @Composable
-private fun TodayScreen() {
+private fun TodayScreen(go: (Screen) -> Unit) {
     watchStore()
     val stats = Store.today()
     val rules = Store.rules()
@@ -340,7 +341,7 @@ private fun TodayScreen() {
             Text(day, style = Type.body.copy(fontSize = 15.sp), color = Ink.muted)
         }
 
-        PhoneToday()
+        PhoneToday { go(Screen.Breakdown) }
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatBox("${stats.wentIn}", "went in", Modifier.weight(1f))
@@ -408,7 +409,7 @@ private fun TodayScreen() {
 
 /** Today's screen time and pickups from the phone's own count, shown quietly. */
 @Composable
-private fun PhoneToday() {
+private fun PhoneToday(onOpen: () -> Unit) {
     val context = LocalContext.current
     var granted by remember { mutableStateOf(Usage.granted(context)) }
     var today by remember { mutableStateOf<Usage.Summary?>(null) }
@@ -434,7 +435,7 @@ private fun PhoneToday() {
             }
         }
     } else if (t != null) {
-        Panel {
+        Panel(Modifier.clickable(role = Role.Button, onClick = onOpen)) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("On your phone today", style = Type.heading, color = Ink.ink)
                 Text(
@@ -449,6 +450,7 @@ private fun PhoneToday() {
                         color = Ink.muted,
                     )
                 }
+                Text("See where your time goes", style = Type.body.copy(fontSize = 15.sp), color = Ink.ink, modifier = Modifier.padding(top = 6.dp))
             }
         }
     }
@@ -467,255 +469,11 @@ private fun StatBox(value: String, label: String, modifier: Modifier) {
     }
 }
 
-// ---------------------------------------------------------------- apps and sites
-
-private fun summary(r: Rule): String {
-    if (r.blocked) return "blocked"
-    val parts = mutableListOf(if (r.pauseSec == 0) "no pause" else "${r.pauseSec} s pause")
-    if (r.opensPerDay > 0) parts += "${r.opensPerDay} opens"
-    if (r.sessionMin > 0) parts += minutesText(r.sessionMin) + " sessions"
-    return parts.joinToString(" · ")
-}
-
-@Composable
-private fun AppsScreen(go: (Screen) -> Unit) {
-    watchStore()
-    val rules = Store.rules()
-    val apps = rules.filter { it.kind == Kind.APP }
-    val sites = rules.filter { it.kind == Kind.SITE }
-    var addingSite by remember { mutableStateOf(false) }
-
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        TabTitle("Apps and sites")
-        Column {
-            Text("Apps", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
-            if (apps.isEmpty()) Text("None yet.", style = Type.small, color = Ink.muted)
-            apps.forEachIndexed { i, r ->
-                ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < apps.lastIndex)
-            }
-            PrimaryButton("Add apps", { go(Screen.Choose(sites = false)) }, Modifier.fillMaxWidth().padding(top = 12.dp))
-        }
-        Column {
-            Text("Websites", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
-            if (sites.isEmpty()) Text("None yet.", style = Type.small, color = Ink.muted)
-            sites.forEachIndexed { i, r ->
-                ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < sites.lastIndex)
-            }
-            PrimaryButton("Add websites", { go(Screen.Choose(sites = true)) }, Modifier.fillMaxWidth().padding(top = 12.dp))
-        }
-        Text(
-            "Websites work in Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.",
-            style = Type.small,
-            color = Ink.muted,
-            modifier = Modifier.padding(bottom = 24.dp),
-        )
-    }
-
-    if (addingSite) {
-        AddSiteDialog(
-            onDone = { domain ->
-                addingSite = false
-                if (domain != null) {
-                    if (Store.rule(domain) == null) Store.saveRule(Rule(id = domain, label = domain, kind = Kind.SITE, pauseSec = Store.defaultPause))
-                    go(Screen.RuleEdit(domain))
-                }
-            },
-        )
-    }
-}
-
-// ---------------------------------------------------------------- settings
-
-@Composable
-private fun SettingsScreen(go: (Screen) -> Unit) {
-    watchStore()
-    var pending by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
-    val p = pending
-    if (p != null) {
-        BreathGate(p.first, onPass = { p.second(); pending = null }, onCancel = { pending = null })
-    } else {
-        SettingsList(go) { reason, action -> if (Store.guardSec > 0) pending = reason to action else action() }
-    }
-}
-
-@Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = Type.title.copy(fontSize = 20.sp, lineHeight = 26.sp), color = Ink.ink, modifier = Modifier.padding(top = 18.dp))
-}
-
-/** Settings, grouped. [guard] runs an action that loosens your rules, after a breath if that's on. */
-@Composable
-private fun SettingsList(go: (Screen) -> Unit, guard: (String, () -> Unit) -> Unit) {
-    val context = LocalContext.current
-    val enabled = rememberServiceEnabled()
-
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        TabTitle("Settings")
-
-        Panel(Modifier.clickable(role = Role.Button) { openAccessibility(context) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Accessibility", style = Type.heading, color = Ink.ink)
-                Text(
-                    if (enabled) "On. [pause] can step in before your apps and sites."
-                    else "Off. Tap to turn on [pause] so it can step in before your apps and sites.",
-                    style = Type.small,
-                    color = Ink.muted,
-                )
-            }
-        }
-
-        HealthCheck(enabled)
-
-        Panel {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Take a break", style = Type.heading, color = Ink.ink)
-                if (Store.onBreak()) {
-                    Text("On a break until ${clock(Store.breakUntil)}. No pauses until then.", style = Type.small, color = Ink.muted)
-                    QuietButton("Resume now", { Store.breakUntil = 0L }, Modifier.fillMaxWidth())
-                } else {
-                    Text("Set [pause] aside for a while. Your rules come back on their own.", style = Type.small, color = Ink.muted)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        QuietButton("1 hour", {
-                            guard("Taking a break?") { Store.breakUntil = System.currentTimeMillis() + 3_600_000L }
-                        }, Modifier.weight(1f))
-                        QuietButton("Until tomorrow", {
-                            guard("Taking a break?") { Store.breakUntil = Store.nextDayStart() }
-                        }, Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        SectionTitle("Your pauses")
-        Panel(Modifier.clickable(role = Role.Button) { go(Screen.Unlock) }) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Unlock pause", style = Type.heading, color = Ink.ink)
-                Text(
-                    if (Store.unlockPauseSec == 0) "Off" else "${Store.unlockPauseSec} s of breathing each time you open your phone",
-                    style = Type.small,
-                    color = Ink.muted,
-                )
-            }
-        }
-        StepSlider(
-            "Pauses grow", "Each open adds this much to the next pause that day",
-            listOf(0, 1, 2, 3, 5), Store.growSec, { if (it == 0) "off" else "+$it s per open" },
-        ) { v -> if (v < Store.growSec) guard("Making pauses shorter?") { Store.growSec = v } else Store.growSec = v }
-        StepSlider(
-            "A heads-up before a session ends", "A quiet notice and a soft tap",
-            listOf(0, 1, 2, 5), Store.headsUpMin, { if (it == 0) "none" else "$it min before" },
-        ) { Store.headsUpMin = it }
-        StepSlider(
-            "Your day starts at", "When opens and counts start again. Later is kinder to night owls.",
-            (0..6).toList(), Store.dayStartHour, { if (it == 0) "midnight" else "%02d:00".format(it) },
-        ) { Store.dayStartHour = it }
-        StepSlider(
-            "Breathe before loosening a rule", "Before changing a rule, choosing apps, or taking a break",
-            listOf(0, 10, 20, 30, 60), Store.guardSec, { if (it == 0) "off" else "$it s" },
-        ) { v -> if (v < Store.guardSec) guard("Making it easier to change your rules?") { Store.guardSec = v } else Store.guardSec = v }
-
-        SectionTitle("At the pause")
-        EditableList(
-            title = "Going in to…",
-            subtitle = "Words you can tap at the pause to say what you're going in for.",
-            items = Store.intentions,
-            addLabel = "Add a word",
-            placeholder = "check the news",
-        ) { Store.intentions = it }
-        EditableList(
-            title = "Instead",
-            subtitle = "After \"Not now\", [pause] suggests one of these.",
-            items = Store.ideas,
-            addLabel = "Add an idea",
-            placeholder = "call a friend",
-        ) { Store.ideas = it }
-
-        SectionTitle("Breathing")
-        ToggleRow(
-            "Breath you can feel",
-            "A soft tap as each breath in and out begins",
-            Store.breathVibration,
-        ) { Store.breathVibration = it }
-        ToggleRow(
-            "A bell at the rest",
-            "A quiet bell as the dots settle into the ensō. Silent when your phone is on silent.",
-            Store.restBell,
-        ) { Store.restBell = it }
-        ToggleRow(
-            "Light breathing screen",
-            "Dark dots on soft white. Off: white dots on black.",
-            Store.breatheLight,
-        ) { Store.breatheLight = it }
-
-        SectionTitle("Look and letters")
-        Panel {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Appearance", style = Type.heading, color = Ink.ink)
-                Choice(
-                    options = listOf("light" to "Light", "dark" to "Black"),
-                    selected = Store.theme,
-                    onSelect = { Store.theme = it },
-                )
-            }
-        }
-        val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            Store.letterOn = granted
-            WeeklyLetter.schedule(context)
-        }
-        ToggleRow("A letter on Sundays", "A few calm sentences about your week, at 10:00", Store.letterOn) { on ->
-            if (on && Build.VERSION.SDK_INT >= 33) {
-                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                Store.letterOn = on
-                WeeklyLetter.schedule(context)
-            }
-        }
-
-        SectionTitle("About")
-        Panel(
-            Modifier.clickable(role = Role.Button) {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TIP_URL)))
-            },
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("Buy me a coffee", style = Type.heading, color = Ink.ink)
-                Text("[pause] is free. If it helps you, you can leave a tip.", style = Type.small, color = Ink.muted)
-            }
-        }
-        Panel {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    "Nothing leaves your phone. No account, no tracking, no ads, and no streaks to keep.",
-                    style = Type.small,
-                    color = Ink.muted,
-                )
-                TextButton(
-                    onClick = {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/jalthouse2/pausephone/issues")),
-                        )
-                    },
-                ) { Text("Report a bug or suggest an idea", style = Type.body, color = Ink.ink) }
-                TextButton(onClick = { Store.welcomeDone = false }) {
-                    Text("See the introduction again", style = Type.body, color = Ink.ink)
-                }
-            }
-        }
-        Spacer(Modifier.height(16.dp))
-    }
-}
-
 internal const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
 
 /** "Is it working?": what [pause] can see right now, in plain words. */
 @Composable
-private fun HealthCheck(enabled: Boolean) {
+internal fun HealthCheck(enabled: Boolean) {
     val context = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     LaunchedEffect(Unit) {
@@ -752,7 +510,7 @@ private fun HealthCheck(enabled: Boolean) {
 
 /** A short list you can add to and remove from. */
 @Composable
-private fun EditableList(
+internal fun EditableList(
     title: String,
     subtitle: String,
     items: List<String>,
@@ -814,7 +572,7 @@ private fun EditableList(
 
 /** A row of choices, one selected. */
 @Composable
-private fun Choice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
+internal fun Choice(options: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         options.forEach { (key, label) ->
             val on = key == selected
@@ -881,57 +639,6 @@ internal fun AddSiteDialog(onDone: (String?) -> Unit) {
 
 internal data class AppEntry(val pkg: String, val label: String, val icon: ImageBitmap?)
 
-@Composable
-private fun AddAppScreen(onPicked: (String) -> Unit, back: () -> Unit) {
-    val context = LocalContext.current
-    var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
-    var query by remember { mutableStateOf("") }
-    LaunchedEffect(Unit) {
-        apps = withContext(Dispatchers.IO) { loadApps(context) }
-    }
-    Column(Modifier.fillMaxSize().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        BackHeader("Add an app", back)
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            singleLine = true,
-            placeholder = { Text("Search your apps", style = Type.body, color = Ink.muted) },
-            textStyle = Type.body,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = Ink.ink,
-                unfocusedBorderColor = Ink.track,
-                cursorColor = Ink.ink,
-            ),
-        )
-        val list = apps
-        if (list == null) {
-            Text("Finding your apps…", style = Type.small, color = Ink.muted, modifier = Modifier.padding(24.dp))
-        } else {
-            val shown = list.filter { query.isBlank() || it.label.contains(query.trim(), ignoreCase = true) }
-            LazyColumn(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                items(shown, key = { it.pkg }) { app ->
-                    ListRow(
-                        app.label,
-                        null,
-                        {
-                            if (app.icon != null) Image(app.icon, contentDescription = null, modifier = Modifier.size(40.dp))
-                            else LetterTile(app.label)
-                        },
-                        {
-                            if (Store.rule(app.pkg) == null) {
-                                Store.saveRule(Rule(id = app.pkg, label = app.label, kind = Kind.APP, pauseSec = Store.defaultPause))
-                            }
-                            onPicked(app.pkg)
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
 internal fun loadApps(context: Context): List<AppEntry> {
     val pm = context.packageManager
     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -952,68 +659,14 @@ internal fun loadApps(context: Context): List<AppEntry> {
         .toList()
 }
 
-// ---------------------------------------------------------------- one rule
+// ---------------------------------------------------------------- steps for a group's settings
 
-private val PAUSES = (0..10).toList()
-private val BREATHS = (3..8).toList()
-private const val BLOCKED = -1
-private val OPENS = listOf(BLOCKED) + (1..20).toList() + 0                    // -1 = none (blocked), 0 = no limit
-private val SESSIONS = listOf(5, 10, 15, 20, 30, 45, 60, 90, 120, 150, 180, 210, 240, 0) // 0 = no limit
-private val BREATHERS = listOf(0, 5, 10, 15, 20, 30, 45, 60)                  // 0 = never
-
-@Composable
-private fun RuleScreen(id: String, back: () -> Unit) {
-    watchStore()
-    val rule = Store.rule(id)
-    if (rule == null) {
-        LaunchedEffect(id) { back() }
-        return
-    }
-    fun save(r: Rule) = Store.saveRule(r)
-
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp)) {
-        BackHeader(rule.label, back)
-        Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            StepSlider(
-                "Pause before opening", "Breathing before it opens",
-                PAUSES, rule.pauseSec, { if (it == 0) "none" else "$it s" },
-            ) { save(rule.copy(pauseSec = it)) }
-            StepSlider(
-                "Breath length", "One breath in, one breath out",
-                BREATHS, rule.breathSec, { "$it s each way" },
-            ) { save(rule.copy(breathSec = it)) }
-            StepSlider(
-                "Opens per day", "After that it stays closed until tomorrow",
-                OPENS, if (rule.blocked) BLOCKED else rule.opensPerDay,
-                { when (it) { BLOCKED -> "none · blocked"; 0 -> "no limit"; 1 -> "1 open"; else -> "$it opens" } },
-            ) {
-                // 0 opens a day is the same as blocking completely, and the switch below follows it.
-                if (it == BLOCKED) save(rule.copy(blocked = true))
-                else save(rule.copy(blocked = false, opensPerDay = it))
-            }
-            StepSlider(
-                "Session length", "Then the breathing cloud returns",
-                SESSIONS, rule.sessionMin, { if (it == 0) "no limit" else minutesText(it) },
-            ) { save(rule.copy(sessionMin = it)) }
-            StepSlider(
-                "A breather along the way", "After this much time in the app",
-                BREATHERS, rule.breatherMin, { if (it == 0) "never" else minutesText(it) },
-            ) { save(rule.copy(breatherMin = it)) }
-
-            Spacer(Modifier.height(8.dp))
-            BlockTimes(rule) { save(rule.copy(blockTimes = it)) }
-            ToggleRow(
-                "Block completely",
-                "It stays closed until you turn this off",
-                rule.blocked,
-            ) { save(rule.copy(blocked = it)) } // the opens dots move to "none" and back with it
-            TextButton(
-                onClick = { Store.removeRule(id); back() },
-                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
-            ) { Text("Remove ${rule.label}", style = Type.button, color = Ink.muted) }
-        }
-    }
-}
+internal val PAUSES = (0..10).toList()
+internal val BREATHS = (3..8).toList()
+internal const val BLOCKED = -1
+internal val OPENS = listOf(BLOCKED) + (1..20).toList() + 0                    // -1 = none (blocked), 0 = no limit
+internal val SESSIONS = listOf(5, 10, 15, 20, 30, 45, 60, 90, 120, 150, 180, 210, 240, 0) // 0 = no limit
+internal val BREATHERS = listOf(0, 5, 10, 15, 20, 30, 45, 60)                  // 0 = never
 
 // ---------------------------------------------------------------- unlock
 
@@ -1044,21 +697,21 @@ private fun UnlockScreen(back: () -> Unit) {
 // ---------------------------------------------------------------- block at set times
 
 @Composable
-private fun BlockTimes(rule: Rule, onChange: (List<TimeWindow>) -> Unit) {
+internal fun BlockTimes(label: String, times: List<TimeWindow>, onChange: (List<TimeWindow>) -> Unit) {
     var adding by remember { mutableStateOf(false) }
     Panel {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Block at set times", style = Type.heading, color = Ink.ink)
             Text(
-                if (rule.blockTimes.isEmpty()) "Choose hours of the day when ${rule.label} rests, every day."
-                else "${rule.label} rests during these hours, every day.",
+                if (times.isEmpty()) "Choose hours of the day when $label rests, every day."
+                else "$label rests during these hours, every day.",
                 style = Type.small,
                 color = Ink.muted,
             )
-            rule.blockTimes.forEachIndexed { i, w ->
+            times.forEachIndexed { i, w ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text("${w.start} to ${w.end}", style = Type.body, color = Ink.ink, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { onChange(rule.blockTimes.filterIndexed { j, _ -> j != i }) }) {
+                    TextButton(onClick = { onChange(times.filterIndexed { j, _ -> j != i }) }) {
                         Text("Remove", style = Type.small, color = Ink.muted)
                     }
                 }
@@ -1070,7 +723,7 @@ private fun BlockTimes(rule: Rule, onChange: (List<TimeWindow>) -> Unit) {
         AddTimeDialog(
             onDone = { w ->
                 adding = false
-                if (w != null) onChange(rule.blockTimes + w)
+                if (w != null) onChange(times + w)
             },
         )
     }

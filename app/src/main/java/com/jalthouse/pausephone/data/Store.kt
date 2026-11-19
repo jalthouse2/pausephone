@@ -44,6 +44,8 @@ data class Rule(
     val breatherMin: Int = 0,
     val blocked: Boolean = false,
     val blockTimes: List<TimeWindow> = emptyList(),
+    /** The group this app or site belongs to, whose settings it uses. */
+    val group: String = "",
 ) {
     fun toJson(): JSONObject = JSONObject()
         .put("id", id).put("label", label).put("kind", kind.name)
@@ -71,6 +73,71 @@ data class Rule(
                     a.optJSONArray(i)?.let { w -> TimeWindow(w.optInt(0), w.optInt(1)) }
                 }
             } ?: if (o.optBoolean("nightBlock", false)) listOf(TimeWindow(22 * 60, 7 * 60)) else emptyList(),
+        )
+    }
+}
+
+/** An app or site in a group. */
+data class Member(val id: String, val label: String, val kind: Kind)
+
+/**
+ * A named group of apps and sites that share one set of rules. Opens and sessions
+ * still count per app or site.
+ */
+data class Group(
+    val id: String,
+    val name: String,
+    val members: List<Member> = emptyList(),
+    val pauseSec: Int = 6,
+    val breathSec: Int = 4,
+    val opensPerDay: Int = 0,
+    val sessionMin: Int = 0,
+    val breatherMin: Int = 0,
+    val blocked: Boolean = false,
+    val blockTimes: List<TimeWindow> = emptyList(),
+) {
+    fun ruleFor(m: Member) = Rule(
+        id = m.id, label = m.label, kind = m.kind,
+        pauseSec = pauseSec, breathSec = breathSec, opensPerDay = opensPerDay,
+        sessionMin = sessionMin, breatherMin = breatherMin, blocked = blocked,
+        blockTimes = blockTimes, group = id,
+    )
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("id", id).put("name", name)
+        .put("members", JSONArray().also { a ->
+            members.forEach { a.put(JSONObject().put("id", it.id).put("label", it.label).put("kind", it.kind.name)) }
+        })
+        .put("pauseSec", pauseSec).put("breathSec", breathSec)
+        .put("opensPerDay", opensPerDay).put("sessionMin", sessionMin)
+        .put("breatherMin", breatherMin).put("blocked", blocked)
+        .put("blockTimes", JSONArray().also { a -> blockTimes.forEach { a.put(JSONArray().put(it.startMin).put(it.endMin)) } })
+
+    companion object {
+        fun fromJson(o: JSONObject): Group {
+            val ms = o.optJSONArray("members")
+            val members = (0 until (ms?.length() ?: 0)).mapNotNull { i ->
+                ms?.optJSONObject(i)?.let { m ->
+                    Member(
+                        m.getString("id"),
+                        m.optString("label", m.getString("id")),
+                        runCatching { Kind.valueOf(m.optString("kind", "APP")) }.getOrDefault(Kind.APP),
+                    )
+                }
+            }
+            val r = Rule.fromJson(JSONObject(o.toString()).put("id", o.getString("id")).put("label", o.optString("name")))
+            return Group(
+                id = o.getString("id"), name = o.optString("name", "Group"), members = members,
+                pauseSec = r.pauseSec, breathSec = r.breathSec, opensPerDay = r.opensPerDay,
+                sessionMin = r.sessionMin, breatherMin = r.breatherMin, blocked = r.blocked, blockTimes = r.blockTimes,
+            )
+        }
+
+        /** An old single-app rule becomes a group of one, named after it. */
+        fun fromRule(r: Rule) = Group(
+            id = "g_" + r.id, name = r.label, members = listOf(Member(r.id, r.label, r.kind)),
+            pauseSec = r.pauseSec, breathSec = r.breathSec, opensPerDay = r.opensPerDay,
+            sessionMin = r.sessionMin, breatherMin = r.breatherMin, blocked = r.blocked, blockTimes = r.blockTimes,
         )
     }
 }
@@ -105,33 +172,70 @@ object Store {
         version++
     }
 
-    // ---- rules ----
+    // ---- groups and rules ----
 
-    fun rules(): List<Rule> {
-        val raw = prefs.getString("rules", null) ?: return emptyList()
-        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
-        return (0 until arr.length()).mapNotNull { i ->
-            runCatching { Rule.fromJson(arr.getJSONObject(i)) }.getOrNull()
+    fun groups(): List<Group> {
+        val raw = prefs.getString("groups", null)
+        if (raw == null) {
+            // Earlier versions kept one rule per app; each becomes a group of one.
+            val old = oldRules()
+            if (old.isEmpty()) return emptyList()
+            val migrated = old.map { Group.fromRule(it) }
+            writeGroups(migrated)
+            return migrated
         }
+        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i -> runCatching { Group.fromJson(arr.getJSONObject(i)) }.getOrNull() }
     }
 
-    private fun writeRules(list: List<Rule>) {
+    private fun oldRules(): List<Rule> {
+        val raw = prefs.getString("rules", null) ?: return emptyList()
+        val arr = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i -> runCatching { Rule.fromJson(arr.getJSONObject(i)) }.getOrNull() }
+    }
+
+    private fun writeGroups(list: List<Group>) {
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
-        prefs.edit().putString("rules", arr.toString()).apply()
+        prefs.edit().putString("groups", arr.toString()).apply()
         changed()
     }
 
-    fun rule(id: String): Rule? = rules().find { it.id == id }
+    fun group(id: String): Group? = groups().find { it.id == id }
 
-    fun saveRule(rule: Rule) {
-        val list = rules().toMutableList()
-        val i = list.indexOfFirst { it.id == rule.id }
-        if (i >= 0) list[i] = rule else list.add(rule)
-        writeRules(list)
+    fun saveGroup(g: Group) {
+        val list = groups().toMutableList()
+        val i = list.indexOfFirst { it.id == g.id }
+        if (i >= 0) list[i] = g else list.add(g)
+        writeGroups(list)
     }
 
-    fun removeRule(id: String) = writeRules(rules().filterNot { it.id == id })
+    fun removeGroup(id: String) = writeGroups(groups().filterNot { it.id == id })
+
+    /** A new, empty group with your usual pause. */
+    fun newGroup(name: String): Group {
+        val g = Group(id = "g" + System.currentTimeMillis(), name = name.ifBlank { "My group" }, pauseSec = defaultPause)
+        saveGroup(g)
+        return g
+    }
+
+    /** Sets a group's members. An app or site lives in one group, so it leaves any other. */
+    fun setMembers(groupId: String, members: List<Member>) {
+        val ids = members.map { it.id }.toSet()
+        writeGroups(
+            groups().map { g ->
+                if (g.id == groupId) g.copy(members = members.distinctBy { it.id })
+                else g.copy(members = g.members.filterNot { it.id in ids })
+            },
+        )
+    }
+
+    fun groupOf(memberId: String): Group? = groups().find { g -> g.members.any { it.id == memberId } }
+
+    /** Every app and site, each with its group's settings. */
+    fun rules(): List<Rule> = groups().flatMap { g -> g.members.map { g.ruleFor(it) } }
+
+    fun rule(id: String): Rule? = rules().find { it.id == id }
 
     fun ruleForPackage(pkg: String): Rule? = rules().find { it.kind == Kind.APP && it.id == pkg }
 

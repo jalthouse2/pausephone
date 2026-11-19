@@ -63,35 +63,94 @@ object Usage {
         return between(context, now - 86_400_000L, now, 1)
     }
 
-    private fun between(context: Context, from: Long, to: Long, days: Int): Summary? {
+    private fun between(context: Context, from: Long, to: Long, days: Int): Summary? =
+        scan(context, from, to, days, to - from)?.summary
+
+    /** A closer look: time and pickups in buckets (hours of a day, or days of a week). */
+    class Detail(
+        val summary: Summary,
+        val from: Long,
+        val bucketMs: Long,
+        val time: LongArray,
+        val pickups: IntArray,
+        val opens: Map<String, Int>,
+        val firstPickup: Long?,
+    )
+
+    /** Today, hour by hour. */
+    fun todayDetail(context: Context): Detail? {
+        val start = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return scan(context, start, System.currentTimeMillis(), 1, 3_600_000L, buckets = 24)
+    }
+
+    /** The last seven days including today, day by day. */
+    fun weekDetail(context: Context): Detail? {
+        val start = LocalDate.now().minusDays(6).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return scan(context, start, System.currentTimeMillis(), 7, 86_400_000L, buckets = 7)
+    }
+
+    private fun scan(
+        context: Context,
+        from: Long,
+        to: Long,
+        days: Int,
+        bucketMs: Long,
+        buckets: Int = 1,
+    ): Detail? {
         if (!granted(context)) return null
         val usm = context.getSystemService(UsageStatsManager::class.java) ?: return null
         val skip = skipped(context)
         val events = runCatching { usm.queryEvents(from, to) }.getOrNull() ?: return null
-        val open = HashMap<String, Long>()   // package → when it came to the front
+        val n = buckets.coerceAtLeast(1)
+        val slot = LongArray(n)
+        val pick = IntArray(n)
+        val open = HashMap<String, Long>()
         val time = HashMap<String, Long>()
+        val opens = HashMap<String, Int>()
         var pickups = 0
+        var front: String? = null
+        var first: Long? = null
+        fun bucket(t: Long) = ((t - from) / bucketMs).toInt().coerceIn(0, n - 1)
+        fun close(pkg: String, began: Long, end: Long) {
+            if (end <= began) return
+            time[pkg] = (time[pkg] ?: 0L) + (end - began)
+            var t = began
+            while (t < end) {
+                val b = bucket(t)
+                val edge = (from + (b + 1) * bucketMs).coerceAtMost(end)
+                slot[b] += (if (edge > t) edge else end) - t
+                t = if (edge > t) edge else end
+            }
+        }
         val e = UsageEvents.Event()
         while (events.hasNextEvent()) {
             events.getNextEvent(e)
             val pkg = e.packageName ?: continue
             when (e.eventType) {
-                UsageEvents.Event.ACTIVITY_RESUMED -> if (pkg !in skip) open.putIfAbsent(pkg, e.timeStamp)
+                UsageEvents.Event.ACTIVITY_RESUMED -> if (pkg !in skip) {
+                    if (open.putIfAbsent(pkg, e.timeStamp) == null && front != pkg) opens[pkg] = (opens[pkg] ?: 0) + 1
+                    front = pkg
+                }
                 UsageEvents.Event.ACTIVITY_PAUSED, UsageEvents.Event.ACTIVITY_STOPPED -> {
                     val began = open.remove(pkg) ?: continue
-                    time[pkg] = (time[pkg] ?: 0L) + (e.timeStamp - began).coerceAtLeast(0L)
+                    close(pkg, began, e.timeStamp)
                 }
                 UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
-                    // The screen went off: close everything that was open.
-                    open.forEach { (p, began) -> time[p] = (time[p] ?: 0L) + (e.timeStamp - began).coerceAtLeast(0L) }
+                    open.forEach { (p, began) -> close(p, began, e.timeStamp) }
                     open.clear()
+                    front = null
                 }
-                UsageEvents.Event.KEYGUARD_HIDDEN -> pickups++
+                UsageEvents.Event.KEYGUARD_HIDDEN -> {
+                    pickups++
+                    pick[bucket(e.timeStamp)]++
+                    if (first == null) first = e.timeStamp
+                    front = null
+                }
             }
         }
-        open.forEach { (p, began) -> time[p] = (time[p] ?: 0L) + (to - began).coerceAtLeast(0L) }
+        open.forEach { (p, began) -> close(p, began, to) }
         val perApp = time.entries.filter { it.value >= 60_000L }.sortedByDescending { it.value }.map { it.key to it.value }
-        return Summary(days, time.values.sum(), pickups, perApp)
+        return Detail(Summary(days, time.values.sum(), pickups, perApp), from, bucketMs, slot, pick, opens, first)
     }
 
     /** The home screen, [pause] itself and the system UI don't count as "using an app". */

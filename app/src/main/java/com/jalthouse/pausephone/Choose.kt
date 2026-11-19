@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jalthouse.pausephone.data.Kind
+import com.jalthouse.pausephone.data.Member
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.data.Usage
@@ -67,18 +68,23 @@ internal val USUAL_SITES = listOf(
 
 /**
  * Choose apps and sites in one place: two tabs, a search box, the usual culprits first,
- * a checkbox on each. Done saves the choices: new ones start with your usual pause,
- * and ones you untick are removed.
+ * a checkbox on each, for one group. Done saves the group's members; an app already in
+ * another group moves here.
  */
 @Composable
-internal fun ChooseScreen(startOnSites: Boolean, onDone: () -> Unit, back: () -> Unit) {
+internal fun ChooseScreen(groupId: String, startOnSites: Boolean, onDone: () -> Unit, back: () -> Unit) {
     val context = LocalContext.current
     var sites by remember { mutableStateOf(startOnSites) }
     var query by remember { mutableStateOf("") }
     var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
     var usage by remember { mutableStateOf<Usage.Summary?>(null) }
     var addingSite by remember { mutableStateOf(false) }
-    val existing = remember { Store.rules() }
+    val group = remember { Store.group(groupId) }
+    val existing = remember { group?.members.orEmpty() }
+    val elsewhere = remember { Store.groups().filter { it.id != groupId }.flatMap { g -> g.members.map { it.id to g.name } }.toMap() }
+    val elsewhereSites = remember {
+        Store.groups().filter { it.id != groupId }.flatMap { g -> g.members.filter { it.kind == Kind.SITE }.map { it.id } }
+    }
     val chosen = remember { mutableStateListOf<String>().apply { addAll(existing.map { it.id }) } }
     val extraSites = remember { mutableStateListOf<String>() }
     LaunchedEffect(Unit) {
@@ -92,23 +98,18 @@ internal fun ChooseScreen(startOnSites: Boolean, onDone: () -> Unit, back: () ->
 
     fun save() {
         val labels = apps.orEmpty().associate { it.pkg to it.label }
-        existing.filter { it.id !in chosen }.forEach { Store.removeRule(it.id) }
-        chosen.filter { id -> existing.none { it.id == id } }.forEach { id ->
-            val isSite = id in USUAL_SITES || id in extraSites || labels[id] == null
-            Store.saveRule(
-                Rule(
-                    id = id,
-                    label = labels[id] ?: id,
-                    kind = if (isSite) Kind.SITE else Kind.APP,
-                    pauseSec = Store.defaultPause,
-                ),
-            )
+        val members = chosen.map { id ->
+            existing.find { it.id == id } ?: run {
+                val isSite = id in USUAL_SITES || id in extraSites || labels[id] == null
+                Member(id, labels[id] ?: id, if (isSite) Kind.SITE else Kind.APP)
+            }
         }
+        Store.setMembers(groupId, members)
         onDone()
     }
 
     Column(Modifier.fillMaxSize().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        BackHeader(if (sites) "Choose sites" else "Choose apps", back)
+        BackHeader(group?.name ?: if (sites) "Choose sites" else "Choose apps", back)
         Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Segment("Apps", !sites) { sites = false; query = "" }
             Segment("Sites", sites) { sites = true; query = "" }
@@ -132,11 +133,11 @@ internal fun ChooseScreen(startOnSites: Boolean, onDone: () -> Unit, back: () ->
         val q = query.trim()
         LazyColumn(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             if (sites) {
-                val all = (USUAL_SITES + existing.filter { it.kind == Kind.SITE }.map { it.id } + extraSites).distinct()
+                val all = (existing.filter { it.kind == Kind.SITE }.map { it.id } + USUAL_SITES + elsewhereSites + extraSites).distinct()
                 val shown = all.filter { q.isEmpty() || it.contains(q, ignoreCase = true) }
                 item { Section("Usual culprits") }
                 items(shown, key = { "s:$it" }) { domain ->
-                    CheckRow(domain, null, { LetterTile(domain) }, domain in chosen) { toggle(domain) }
+                    CheckRow(domain, elsewhere[domain]?.let { "in $it" }, { LetterTile(domain) }, domain in chosen) { toggle(domain) }
                 }
                 item {
                     QuietButton(
@@ -160,11 +161,11 @@ internal fun ChooseScreen(startOnSites: Boolean, onDone: () -> Unit, back: () ->
                     val rest = match.filter { it.pkg !in usualIds }
                     if (usual.isNotEmpty()) item { Section("Usual culprits") }
                     items(usual, key = { "u:${it.pkg}" }) { app ->
-                        AppRow(app, timeOf[app.pkg]?.let { durationText(it / days) + " a day" }, app.pkg in chosen) { toggle(app.pkg) }
+                        AppRow(app, listOfNotNull(timeOf[app.pkg]?.let { durationText(it / days) + " a day" }, elsewhere[app.pkg]?.let { "in $it" }).joinToString(" · ").ifBlank { null }, app.pkg in chosen) { toggle(app.pkg) }
                     }
                     if (rest.isNotEmpty()) item { Section("All apps") }
                     items(rest, key = { "a:${it.pkg}" }) { app ->
-                        AppRow(app, timeOf[app.pkg]?.let { durationText(it / days) + " a day" }, app.pkg in chosen) { toggle(app.pkg) }
+                        AppRow(app, listOfNotNull(timeOf[app.pkg]?.let { durationText(it / days) + " a day" }, elsewhere[app.pkg]?.let { "in $it" }).joinToString(" · ").ifBlank { null }, app.pkg in chosen) { toggle(app.pkg) }
                     }
                 }
             }

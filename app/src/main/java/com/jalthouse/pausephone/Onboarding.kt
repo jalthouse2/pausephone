@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.jalthouse.pausephone.data.Kind
+import com.jalthouse.pausephone.data.Member
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Progress
 import com.jalthouse.pausephone.data.Store
@@ -437,11 +438,11 @@ private fun ColumnScope.FirstApps(next: () -> Unit) {
         if (chosen.isEmpty()) "Skip for now" else "Continue with ${chosen.size}",
         {
             val all = apps.orEmpty().associateBy { it.pkg }
-            chosen.forEach { pkg ->
-                if (Store.rule(pkg) == null) {
-                    val label = all[pkg]?.label ?: pkg
-                    Store.saveRule(Rule(id = pkg, label = label, kind = Kind.APP, pauseSec = Store.defaultPause))
-                }
+            if (chosen.isNotEmpty()) {
+                val group = Store.groups().firstOrNull() ?: Store.newGroup("Apps that pull me in")
+                val members = group.members + chosen.filter { id -> group.members.none { it.id == id } }
+                    .map { pkg -> Member(pkg, all[pkg]?.label ?: pkg, Kind.APP) }
+                Store.setMembers(group.id, members)
             }
             next()
         },

@@ -5,8 +5,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
@@ -131,7 +131,7 @@ fun QuietButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
 }
 
 /**
- * A labelled row of dots, one per step: tap a dot or drag along them, or use − and +.
+ * A labelled row of dots, one per step: tap a dot, slide along them, or use − and +.
  * The dots sit inset from the screen edge so the first and last are easy to reach.
  */
 @Composable
@@ -146,6 +146,11 @@ fun <T> StepSlider(
     val index = steps.indexOf(value).coerceAtLeast(0)
     val current by rememberUpdatedState(index)
     val change by rememberUpdatedState(onChange)
+    fun pickAt(x: Float, width: Float, pad: Float) {
+        val span = (width - 2 * pad).coerceAtLeast(1f)
+        val i = (((x - pad) / span) * steps.lastIndex).roundToInt().coerceIn(0, steps.lastIndex)
+        if (i != current) change(steps[i])
+    }
     val dotColor = Ink.ink
     val restColor = Ink.track
     Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
@@ -161,23 +166,15 @@ fun <T> StepSlider(
                     .weight(1f)
                     .height(48.dp)
                     .semantics { stateDescription = format(value) }
+                    // A tap picks a dot. Dragging sideways moves along them, but only once the
+                    // finger clearly moves sideways, so scrolling the page never changes a setting.
                     .pointerInput(steps.size) {
-                        val pad = 10.dp.toPx()
-                        fun pick(x: Float) {
-                            val span = (size.width - 2 * pad).coerceAtLeast(1f)
-                            val i = (((x - pad) / span) * steps.lastIndex).roundToInt().coerceIn(0, steps.lastIndex)
-                            if (i != current) change(steps[i])
-                        }
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            pick(down.position.x)
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                val c = event.changes.firstOrNull() ?: break
-                                if (!c.pressed) break
-                                pick(c.position.x)
-                                c.consume()
-                            }
+                        detectTapGestures { p -> pickAt(p.x, size.width.toFloat(), 10.dp.toPx()) }
+                    }
+                    .pointerInput(steps.size) {
+                        detectHorizontalDragGestures { change, _ ->
+                            change.consume()
+                            pickAt(change.position.x, size.width.toFloat(), 10.dp.toPx())
                         }
                     },
             ) {

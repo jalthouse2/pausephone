@@ -106,10 +106,11 @@ internal fun ChooseScreen(groupId: String, startOnSites: Boolean, onDone: () -> 
             }
         }
         val removing = existing.any { it.id !in chosen }
-        if (Store.guardSec > 0 && removing) {
+        if (removing && Ease.needsBreath()) {
             pendingMembers = members // taking apps out loosens your rules: a breath first
         } else {
             Store.setMembers(groupId, members)
+            if (!removing) Ease.tightened()
             onDone()
         }
     }

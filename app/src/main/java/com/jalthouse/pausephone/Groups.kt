@@ -306,7 +306,7 @@ internal fun GroupScreen(id: String, go: (Screen) -> Unit, back: () -> Unit) {
             confirmButton = {
                 TextButton(onClick = {
                     removing = false
-                    if (Store.guardSec > 0 && g.members.isNotEmpty()) gateRemove = true else { Store.removeGroup(id); back() }
+                    if (Ease.needsBreath() && g.members.isNotEmpty()) gateRemove = true else { Store.removeGroup(id); back() }
                 }) {
                     Text("Remove", style = Type.button, color = Ink.ink)
                 }
@@ -376,7 +376,13 @@ internal fun GroupPartScreen(id: String, part: String, back: () -> Unit) {
         return
     }
     fun save(n: Group) {
-        if (Store.guardSec > 0 && loosens(g, n)) pending = n else Store.saveGroup(n)
+        val looser = loosens(g, n)
+        if (looser && Ease.needsBreath()) {
+            pending = n
+        } else {
+            Store.saveGroup(n)
+            if (!looser) Ease.tightened()
+        }
     }
     val (title, line) = when (part) {
         "before" -> "Before opening" to "How [pause] greets ${g.name} each time you open one."

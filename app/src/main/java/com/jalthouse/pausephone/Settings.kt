@@ -54,7 +54,7 @@ private val PARTS = listOf(
 /** Runs [action], which loosens your rules, after a breath when that setting is on. */
 @Composable
 private fun rememberGuard(onGate: (Pair<String, () -> Unit>) -> Unit): (String, () -> Unit) -> Unit =
-    { reason, action -> if (Store.guardSec > 0) onGate(reason to action) else action() }
+    { reason, action -> if (Ease.needsBreath()) onGate(reason to action) else action() }
 
 /** A short main page, with categories to tap into. */
 @Composable
@@ -152,7 +152,10 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                     StepSlider(
                         "Pauses grow", "Each open adds this much to the next pause that day",
                         listOf(0, 1, 2, 3, 5), Store.growSec, { if (it == 0) "off" else "+$it s per open" },
-                    ) { v -> if (v < Store.growSec) guard("Making pauses shorter?") { Store.growSec = v } else Store.growSec = v }
+                    ) { v ->
+                        if (v < Store.growSec) guard("Making pauses shorter?") { Store.growSec = v }
+                        else { Store.growSec = v; Ease.tightened() }
+                    }
                     StepSlider(
                         "A heads-up before a session ends", "A quiet notice and a soft tap",
                         listOf(0, 1, 2, 5), Store.headsUpMin, { if (it == 0) "none" else "$it min before" },
@@ -164,7 +167,7 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                     StepSlider(
                         "Breathe before loosening a rule", "Only when a change makes things easier, or before a break",
                         listOf(0, 3, 5, 10, 20, 30), Store.guardSec, { if (it == 0) "off" else "$it s" },
-                    ) { v -> if (v < Store.guardSec) guard("Making it easier to change your rules?") { Store.guardSec = v } else Store.guardSec = v }
+                    ) { v -> Store.guardSec = v } // changing this never asks for a breath
 
                 }
                 "atpause" -> {

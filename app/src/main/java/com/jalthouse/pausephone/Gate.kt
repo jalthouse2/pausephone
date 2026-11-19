@@ -35,6 +35,18 @@ import com.jalthouse.pausephone.ui.Type
 import kotlin.math.ceil
 
 /**
+ * An undo window: for two minutes after you make something stricter, putting it back is free.
+ * Mistakes shouldn't cost a breath.
+ */
+object Ease {
+    @Volatile private var lastTighten = 0L
+    fun tightened() { lastTighten = System.currentTimeMillis() }
+    fun inUndoWindow() = System.currentTimeMillis() - lastTighten < 120_000L
+    /** True when a loosening change should wait for a breath. */
+    fun needsBreath() = Store.guardSec > 0 && !inUndoWindow()
+}
+
+/**
  * "Breathe before loosening a rule": a short breath before changing rules or taking a break,
  * so loosening them is a choice, not an impulse.
  */

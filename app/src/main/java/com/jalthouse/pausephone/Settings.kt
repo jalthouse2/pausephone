@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.ui.BackHeader
 import com.jalthouse.pausephone.ui.Ink
@@ -41,6 +42,13 @@ import com.jalthouse.pausephone.ui.StepSlider
 import com.jalthouse.pausephone.ui.ToggleRow
 import com.jalthouse.pausephone.ui.Type
 
+private val ABOUT = listOf(
+    "Our phones are built to catch us before we've chosen anything. A buzz, a red dot, a feed with no bottom, and the moment has gone.",
+    "[pause] is a small way to take that moment back. It puts one breath between you and the apps you choose, so that opening them becomes a choice again. You can still go in. Nothing is locked away from you.",
+    "I made it with a simple hope: that all beings might meet their world with a little more attention and a little more heart. That can start the next time you reach for your phone.",
+    "No account, no ads, no streaks. Nothing leaves your phone.",
+)
+
 private val PARTS = listOf(
     Triple("pauses", "Your pauses", "Unlock pause, pauses that grow, heads-up, when your day starts"),
     Triple("atpause", "At the pause", "Going in to…, and things to do instead"),
@@ -48,7 +56,7 @@ private val PARTS = listOf(
     Triple("appearance", "Appearance", "Light or black, and the breathing screen"),
     Triple("intention", "Morning intention", "A question each morning, and today's intention"),
     Triple("letter", "Sunday letter", "A few calm sentences about your week"),
-    Triple("about", "About", "Privacy, a coffee, bugs and ideas, the introduction"),
+    Triple("about", "About", "Why [pause], a coffee, bugs and ideas, the introduction"),
 )
 
 /** Runs [action], which loosens your rules, after a breath when that setting is on. */
@@ -259,6 +267,11 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                     }
                 }
                 else -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                        Text("Why [pause]", style = Type.title.copy(fontSize = 22.sp, lineHeight = 28.sp), color = Ink.ink)
+                        ABOUT.forEach { Text(it, style = Type.body.copy(lineHeight = 24.sp), color = Ink.ink) }
+                        Text("Jeff", style = Type.body, color = Ink.muted)
+                    }
                     Panel(
                         Modifier.clickable(role = Role.Button) {
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TIP_URL)))
@@ -271,11 +284,6 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                     }
                     Panel {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(
-                                "Nothing leaves your phone. No account, no tracking, no ads, and no streaks to keep.",
-                                style = Type.small,
-                                color = Ink.muted,
-                            )
                             TextButton(
                                 onClick = {
                                     context.startActivity(

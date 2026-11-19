@@ -174,6 +174,12 @@ class PauseService : AccessibilityService() {
             return
         }
         val session = Sessions.active(rule.id, now)
+        if (session != null && overDailyTime(rule)) {
+            Sessions.end(rule.id)
+            currentId = null
+            launch(PauseMode.BLOCKED, rule, "time")
+            return
+        }
         if (session != null) {
             // Back inside an open session: no pause, no new open. If you were away a while,
             // the next breather counts from now, so it doesn't greet you at the door.
@@ -188,6 +194,11 @@ class PauseService : AccessibilityService() {
         if (rule.opensPerDay > 0 && Store.opensToday(rule.id) >= rule.opensPerDay) {
             currentId = null
             launch(PauseMode.BLOCKED, rule, "limit")
+            return
+        }
+        if (overDailyTime(rule)) {
+            currentId = null
+            launch(PauseMode.BLOCKED, rule, "time")
             return
         }
         currentId = rule.id
@@ -205,15 +216,25 @@ class PauseService : AccessibilityService() {
         rule.blockingWindow() != null -> "${rule.label}: blocked at this time"
         Sessions.active(rule.id, now) != null -> "${rule.label}: no pause, you're inside a session you already opened"
         rule.opensPerDay > 0 && Store.opensToday(rule.id) >= rule.opensPerDay -> "${rule.label}: no opens left today"
+        overDailyTime(rule) -> "${rule.label}: today's time is used up"
         rule.pauseSec == 0 -> "${rule.label}: no pause, its pause is set to none"
         else -> "${rule.label}: paused for ${rule.pauseSec} s"
     }
 
-    /** Runs every few seconds: session end and breathers along the way. */
+    private fun overDailyTime(rule: Rule) = rule.dailyMin > 0 && Store.timeToday(rule.id) >= rule.dailyMin * 60_000L
+
+    /** Runs every few seconds: time today, the daily limit, session end and breathers along the way. */
     private fun checkSession() {
         val id = currentId ?: return
         if (PauseActivity.visible) return
         val rule = Store.rule(id) ?: return
+        Store.addTime(id, TICK_MS)
+        if (overDailyTime(rule)) {
+            Sessions.end(id)
+            currentId = null
+            launch(PauseMode.BLOCKED, rule, "time")
+            return
+        }
         val session = Sessions.get(id) ?: return
         val now = System.currentTimeMillis()
         session.lastSeen = now

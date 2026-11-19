@@ -45,6 +45,8 @@ data class Rule(
     val breatherMin: Int = 0,
     val blocked: Boolean = false,
     val blockTimes: List<TimeWindow> = emptyList(),
+    /** Total minutes a day for each app or site; 0 = no limit. */
+    val dailyMin: Int = 0,
     /** The group this app or site belongs to, whose settings it uses. */
     val group: String = "",
 ) {
@@ -52,7 +54,7 @@ data class Rule(
         .put("id", id).put("label", label).put("kind", kind.name)
         .put("pauseSec", pauseSec).put("breathSec", breathSec)
         .put("opensPerDay", opensPerDay).put("sessionMin", sessionMin)
-        .put("breatherMin", breatherMin).put("blocked", blocked)
+        .put("breatherMin", breatherMin).put("blocked", blocked).put("dailyMin", dailyMin)
         .put("blockTimes", JSONArray().also { a -> blockTimes.forEach { a.put(JSONArray().put(it.startMin).put(it.endMin)) } })
 
     /** The set time that is blocking right now, if any. */
@@ -74,6 +76,7 @@ data class Rule(
                     a.optJSONArray(i)?.let { w -> TimeWindow(w.optInt(0), w.optInt(1)) }
                 }
             } ?: if (o.optBoolean("nightBlock", false)) listOf(TimeWindow(22 * 60, 7 * 60)) else emptyList(),
+            dailyMin = o.optInt("dailyMin", 0),
         )
     }
 }
@@ -96,12 +99,14 @@ data class Group(
     val breatherMin: Int = 0,
     val blocked: Boolean = false,
     val blockTimes: List<TimeWindow> = emptyList(),
+    /** Total minutes a day for each app or site; 0 = no limit. */
+    val dailyMin: Int = 0,
 ) {
     fun ruleFor(m: Member) = Rule(
         id = m.id, label = m.label, kind = m.kind,
         pauseSec = pauseSec, breathSec = breathSec, opensPerDay = opensPerDay,
         sessionMin = sessionMin, breatherMin = breatherMin, blocked = blocked,
-        blockTimes = blockTimes, group = id,
+        blockTimes = blockTimes, dailyMin = dailyMin, group = id,
     )
 
     fun toJson(): JSONObject = JSONObject()
@@ -111,7 +116,7 @@ data class Group(
         })
         .put("pauseSec", pauseSec).put("breathSec", breathSec)
         .put("opensPerDay", opensPerDay).put("sessionMin", sessionMin)
-        .put("breatherMin", breatherMin).put("blocked", blocked)
+        .put("breatherMin", breatherMin).put("blocked", blocked).put("dailyMin", dailyMin)
         .put("blockTimes", JSONArray().also { a -> blockTimes.forEach { a.put(JSONArray().put(it.startMin).put(it.endMin)) } })
 
     companion object {
@@ -131,6 +136,7 @@ data class Group(
                 id = o.getString("id"), name = o.optString("name", "Group"), members = members,
                 pauseSec = r.pauseSec, breathSec = r.breathSec, opensPerDay = r.opensPerDay,
                 sessionMin = r.sessionMin, breatherMin = r.breatherMin, blocked = r.blocked, blockTimes = r.blockTimes,
+                dailyMin = r.dailyMin,
             )
         }
 
@@ -518,6 +524,18 @@ object Store {
     }
 
     fun opensToday(id: String): Int = today().opens[id] ?: 0
+
+    /** Time spent today in [id] while [pause] watched it, in ms (counts toward a daily limit). */
+    fun timeToday(id: String): Long = dayJson().optJSONObject("time")?.optLong(id, 0L) ?: 0L
+
+    /** Adds time in [id] to today's total. Called every few seconds by the service. */
+    fun addTime(id: String, ms: Long) {
+        val o = dayJson()
+        val t = o.optJSONObject("time") ?: JSONObject()
+        t.put(id, t.optLong(id, 0L) + ms)
+        o.put("time", t)
+        prefs.edit().putString(dayKey(), o.toString()).apply()
+    }
 
     /** Counts one open of [id] and one "went in", with what you went in for if you said. */
     fun recordOpen(id: String, intent: String? = null) {

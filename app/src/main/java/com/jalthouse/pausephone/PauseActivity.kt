@@ -272,6 +272,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         PauseMode.BLOCKED -> when {
             req.reason?.startsWith("until:") == true -> "$label is resting until ${req.reason.removePrefix("until:")}"
             req.reason == "limit" -> "that's all the opens for $label today"
+            req.reason == "time" -> "that's your time with $label for today"
             else -> "$label is resting"
         }
         PauseMode.UNLOCK -> "welcome back"
@@ -386,6 +387,10 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             val parts = mutableListOf(ordinal(used + 1) + " open today")
             if (rule.opensPerDay > 0) parts += "${(rule.opensPerDay - used - 1).coerceAtLeast(0)} left"
             if (rule.sessionMin > 0) parts += minutesText(rule.sessionMin) + " session"
+            if (rule.dailyMin > 0) {
+                val used = (Store.timeToday(rule.id) / 60_000L).toInt()
+                parts += "$used of ${minutesText(rule.dailyMin)} today"
+            }
             Text(
                 parts.joinToString(" · "),
                 style = Type.small,

@@ -52,6 +52,9 @@ import com.jalthouse.pausephone.ui.ToggleRow
 import com.jalthouse.pausephone.ui.Type
 import com.jalthouse.pausephone.ui.minutesText
 
+/** Time per day, per app: 0 = no limit. */
+private val DAILY = listOf(0, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240)
+
 private val NAME_IDEAS = listOf("Social", "Video", "News", "Work", "Games", "Shopping", "Messages")
 
 // ---------------------------------------------------------------- summaries
@@ -63,6 +66,7 @@ private fun limitsText(g: Group): String {
     val parts = mutableListOf<String>()
     if (g.opensPerDay > 0) parts += "${g.opensPerDay} ${if (g.opensPerDay == 1) "open" else "opens"} a day"
     if (g.sessionMin > 0) parts += minutesText(g.sessionMin) + " sessions"
+    if (g.dailyMin > 0) parts += minutesText(g.dailyMin) + " a day"
     if (g.breatherMin > 0) parts += "a breather after " + minutesText(g.breatherMin)
     return if (parts.isEmpty()) "No limits" else parts.joinToString(" · ")
 }
@@ -356,6 +360,7 @@ internal fun loosens(before: Group, after: Group): Boolean {
         cap(after.opensPerDay) > cap(before.opensPerDay) ||
         cap(after.sessionMin) > cap(before.sessionMin) ||
         cap(after.breatherMin) > cap(before.breatherMin) ||
+        cap(after.dailyMin) > cap(before.dailyMin) ||
         (before.blocked && !after.blocked) ||
         before.blockTimes.any { it !in after.blockTimes }
 }
@@ -406,7 +411,21 @@ internal fun GroupPartScreen(id: String, part: String, back: () -> Unit) {
                     ) { save(g.copy(breathSec = it)) }
                 }
                 "limits" -> {
-                    if (g.opensPerDay > 0 && g.sessionMin > 0 && !g.blocked) {
+                    if (g.dailyMin > 0 && !g.blocked) {
+                        Panel {
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("${minutesText(g.dailyMin)} a day per app", style = Type.stat.copy(fontSize = 22.sp), color = Ink.ink)
+                                Text(
+                                    listOfNotNull(
+                                        if (g.opensPerDay > 0) "${g.opensPerDay} ${if (g.opensPerDay == 1) "open" else "opens"}" else null,
+                                        if (g.sessionMin > 0) "up to ${minutesText(g.sessionMin)} each" else null,
+                                    ).joinToString(", ").ifBlank { "as many opens as you like" },
+                                    style = Type.small,
+                                    color = Ink.muted,
+                                )
+                            }
+                        }
+                    } else if (g.opensPerDay > 0 && g.sessionMin > 0 && !g.blocked) {
                         Panel {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(
@@ -429,6 +448,10 @@ internal fun GroupPartScreen(id: String, part: String, back: () -> Unit) {
                     ) {
                         if (it == BLOCKED) save(g.copy(blocked = true)) else save(g.copy(blocked = false, opensPerDay = it))
                     }
+                    StepSlider(
+                        "Time per day", "For each app or site. When it's used up, it rests until tomorrow.",
+                        DAILY, g.dailyMin, { if (it == 0) "no limit" else minutesText(it) },
+                    ) { save(g.copy(dailyMin = it)) }
                     StepSlider(
                         "Session length", "Then the breathing cloud returns",
                         SESSIONS, g.sessionMin, { if (it == 0) "no limit" else minutesText(it) },

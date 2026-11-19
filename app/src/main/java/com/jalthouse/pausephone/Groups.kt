@@ -262,6 +262,11 @@ internal fun GroupScreen(id: String, go: (Screen) -> Unit, back: () -> Unit) {
     }
     var renaming by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf(false) }
+    var gateRemove by remember { mutableStateOf(false) }
+    if (gateRemove) {
+        BreathGate("Removing ${g.name}?", onPass = { gateRemove = false; Store.removeGroup(id); back() }, onCancel = { gateRemove = false })
+        return
+    }
     val apps = g.members.filter { it.kind == Kind.APP }
     val sites = g.members.filter { it.kind == Kind.SITE }
 
@@ -299,7 +304,10 @@ internal fun GroupScreen(id: String, go: (Screen) -> Unit, back: () -> Unit) {
             title = { Text("Remove ${g.name}?", style = Type.heading, color = Ink.ink) },
             text = { Text("Its apps and sites will open without a pause.", style = Type.body, color = Ink.muted) },
             confirmButton = {
-                TextButton(onClick = { removing = false; Store.removeGroup(id); back() }) {
+                TextButton(onClick = {
+                    removing = false
+                    if (Store.guardSec > 0 && g.members.isNotEmpty()) gateRemove = true else { Store.removeGroup(id); back() }
+                }) {
                     Text("Remove", style = Type.button, color = Ink.ink)
                 }
             },
@@ -341,6 +349,17 @@ private fun Part(title: String, value: String, onClick: () -> Unit) {
 
 // ---------------------------------------------------------------- one part of a group
 
+/** True when [after] is easier on you than [before]: shorter pause, more opens or time, less blocking. */
+internal fun loosens(before: Group, after: Group): Boolean {
+    fun cap(x: Int) = if (x == 0) Int.MAX_VALUE else x // 0 means "no limit" or "never"
+    return after.pauseSec < before.pauseSec ||
+        cap(after.opensPerDay) > cap(before.opensPerDay) ||
+        cap(after.sessionMin) > cap(before.sessionMin) ||
+        cap(after.breatherMin) > cap(before.breatherMin) ||
+        (before.blocked && !after.blocked) ||
+        before.blockTimes.any { it !in after.blockTimes }
+}
+
 @Composable
 internal fun GroupPartScreen(id: String, part: String, back: () -> Unit) {
     watchStore()
@@ -349,7 +368,16 @@ internal fun GroupPartScreen(id: String, part: String, back: () -> Unit) {
         LaunchedEffect(id) { back() }
         return
     }
-    fun save(n: Group) = Store.saveGroup(n)
+    // Making a rule stricter saves at once; loosening it asks for a breath first, if that's on.
+    var pending by remember { mutableStateOf<Group?>(null) }
+    val p = pending
+    if (p != null) {
+        BreathGate("Loosening a rule?", onPass = { Store.saveGroup(p); pending = null }, onCancel = { pending = null })
+        return
+    }
+    fun save(n: Group) {
+        if (Store.guardSec > 0 && loosens(g, n)) pending = n else Store.saveGroup(n)
+    }
     val (title, line) = when (part) {
         "before" -> "Before opening" to "How [pause] greets ${g.name} each time you open one."
         "limits" -> "Limits" to "How often and how long, for each app or site in ${g.name}."

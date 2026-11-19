@@ -212,11 +212,9 @@ private fun ColumnScope.Main(
             if (top != null) {
                 when (top) {
                     Screen.Unlock -> UnlockScreen(back)
-                    is Screen.Choose -> Guarded("Changing your apps and sites?", back) {
-                        ChooseScreen(top.groupId, top.sites, onDone = back, back = back)
-                    }
+                    is Screen.Choose -> ChooseScreen(top.groupId, top.sites, onDone = back, back = back)
                     is Screen.GroupEdit -> GroupScreen(top.id, go, back)
-                    is Screen.GroupPart -> Guarded("Changing a rule?", back) { GroupPartScreen(top.id, top.part, back) }
+                    is Screen.GroupPart -> GroupPartScreen(top.id, top.part, back)
                     is Screen.SettingsPart -> SettingsPartScreen(top.part, go, back)
                     Screen.Breakdown -> BreakdownScreen(back)
                     Screen.Sit -> SitScreen(back)

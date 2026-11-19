@@ -79,6 +79,7 @@ internal fun ChooseScreen(groupId: String, startOnSites: Boolean, onDone: () -> 
     var apps by remember { mutableStateOf<List<AppEntry>?>(null) }
     var usage by remember { mutableStateOf<Usage.Summary?>(null) }
     var addingSite by remember { mutableStateOf(false) }
+    var pendingMembers by remember { mutableStateOf<List<Member>?>(null) }
     val group = remember { Store.group(groupId) }
     val existing = remember { group?.members.orEmpty() }
     val elsewhere = remember { Store.groups().filter { it.id != groupId }.flatMap { g -> g.members.map { it.id to g.name } }.toMap() }
@@ -104,8 +105,23 @@ internal fun ChooseScreen(groupId: String, startOnSites: Boolean, onDone: () -> 
                 Member(id, labels[id] ?: id, if (isSite) Kind.SITE else Kind.APP)
             }
         }
-        Store.setMembers(groupId, members)
-        onDone()
+        val removing = existing.any { it.id !in chosen }
+        if (Store.guardSec > 0 && removing) {
+            pendingMembers = members // taking apps out loosens your rules: a breath first
+        } else {
+            Store.setMembers(groupId, members)
+            onDone()
+        }
+    }
+
+    val pm = pendingMembers
+    if (pm != null) {
+        BreathGate(
+            "Taking apps out of ${group?.name ?: "this group"}?",
+            onPass = { Store.setMembers(groupId, pm); pendingMembers = null; onDone() },
+            onCancel = { pendingMembers = null },
+        )
+        return
     }
 
     Column(Modifier.fillMaxSize().imePadding().padding(horizontal = 12.dp, vertical = 8.dp)) {

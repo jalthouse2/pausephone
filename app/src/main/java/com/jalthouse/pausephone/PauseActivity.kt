@@ -98,6 +98,10 @@ class PauseActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
+        // Paint the right background at once, so the light breathing screen doesn't flash dark first.
+        window.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(if (Store.breatheLight) 0xFFF5F5F2.toInt() else 0xFF161614.toInt()),
+        )
         request = parse(intent)
         onBackPressedDispatcher.addCallback(this) { onBack() }
         setContent {

@@ -58,6 +58,16 @@ class Breath(val inOut: Float) {
     }
 }
 
+/** The dots and their places in the ensō are worked out once and reused, so the pause opens at once. */
+private val cache = HashMap<Int, Dots>()
+
+private fun dotsFor(count: Int): Dots = synchronized(cache) { cache.getOrPut(count) { Dots(count, seed = 7) } }
+
+/** Prepares the dots in the background, ahead of the first pause. */
+fun warmUpDots(count: Int = 3000) {
+    Thread { dotsFor(count) }.start()
+}
+
 private class Dots(n: Int, seed: Int) {
     val angle = FloatArray(n)
     val radius = FloatArray(n)
@@ -132,7 +142,7 @@ fun DotCloud(
     count: Int = 3000,
     color: Color = Ink.mist,
 ) {
-    val dots = remember(count) { Dots(count, seed = 7) }
+    val dots = remember(count) { dotsFor(count) }
     val breath = remember(breathSec) { Breath(breathSec.toFloat()) }
     Canvas(modifier) {
         val el = elapsed()

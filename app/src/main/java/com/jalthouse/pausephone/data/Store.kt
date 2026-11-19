@@ -11,7 +11,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 
-enum class Kind { APP, SITE }
+/** An app, a website, or a part of an app (like Reels or Shorts). */
+enum class Kind { APP, SITE, PART }
 
 /** A daily stretch of time, in minutes after midnight. It may run past midnight (22:00 to 07:00). */
 data class TimeWindow(val startMin: Int, val endMin: Int) {
@@ -168,8 +169,11 @@ object Store {
         }
     }
 
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /** Tells the screens to redraw. Always on the main thread, wherever the change came from. */
     private fun changed() {
-        version++
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) version++ else main.post { version++ }
     }
 
     // ---- groups and rules ----
@@ -238,6 +242,8 @@ object Store {
     fun rule(id: String): Rule? = rules().find { it.id == id }
 
     fun ruleForPackage(pkg: String): Rule? = rules().find { it.kind == Kind.APP && it.id == pkg }
+
+    fun ruleForPart(id: String): Rule? = rules().find { it.kind == Kind.PART && it.id == id }
 
     fun ruleForHost(host: String): Rule? = rules().find {
         it.kind == Kind.SITE && (host == it.id || host.endsWith("." + it.id))

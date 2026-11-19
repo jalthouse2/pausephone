@@ -267,7 +267,7 @@ internal fun GroupScreen(id: String, go: (Screen) -> Unit, back: () -> Unit) {
         BreathGate("Removing ${g.name}?", onPass = { gateRemove = false; Store.removeGroup(id); back() }, onCancel = { gateRemove = false })
         return
     }
-    val apps = g.members.filter { it.kind == Kind.APP }
+    val apps = g.members.filter { it.kind != Kind.SITE }
     val sites = g.members.filter { it.kind == Kind.SITE }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp)) {

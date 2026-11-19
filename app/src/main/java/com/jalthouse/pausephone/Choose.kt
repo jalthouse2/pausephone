@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Member
+import com.jalthouse.pausephone.data.APP_PARTS
+import com.jalthouse.pausephone.data.partFor
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.data.Usage
@@ -101,8 +103,12 @@ internal fun ChooseScreen(groupId: String, startOnSites: Boolean, onDone: () -> 
         val labels = apps.orEmpty().associate { it.pkg to it.label }
         val members = chosen.map { id ->
             existing.find { it.id == id } ?: run {
-                val isSite = id in USUAL_SITES || id in extraSites || labels[id] == null
-                Member(id, labels[id] ?: id, if (isSite) Kind.SITE else Kind.APP)
+                val part = partFor(id)
+                val isSite = part == null && (id in USUAL_SITES || id in extraSites || labels[id] == null)
+                when {
+                    part != null -> Member(id, part.label, Kind.PART)
+                    else -> Member(id, labels[id] ?: id, if (isSite) Kind.SITE else Kind.APP)
+                }
             }
         }
         val removing = existing.any { it.id !in chosen }
@@ -176,6 +182,18 @@ internal fun ChooseScreen(groupId: String, startOnSites: Boolean, onDone: () -> 
                     val usual = match.filter { it.pkg in usualIds }
                         .sortedByDescending { timeOf[it.pkg] ?: 0L }
                     val rest = match.filter { it.pkg !in usualIds }
+                    // Parts of apps, like Reels and Shorts, for the apps you have.
+                    val installed = list.map { it.pkg }.toSet()
+                    val parts = APP_PARTS.filter { it.pkg in installed && (q.isEmpty() || it.label.contains(q, ignoreCase = true)) }
+                    if (parts.isNotEmpty()) item { Section("Just one part of an app") }
+                    items(parts, key = { "p:${it.id}" }) { part ->
+                        CheckRow(
+                            part.label,
+                            listOfNotNull("only that part, not the whole app", elsewhere[part.id]?.let { "in $it" }).joinToString(" · "),
+                            { LetterTile(part.label) },
+                            part.id in chosen,
+                        ) { toggle(part.id) }
+                    }
                     if (usual.isNotEmpty()) item { Section("Usual culprits") }
                     items(usual, key = { "u:${it.pkg}" }) { app ->
                         AppRow(app, listOfNotNull(timeOf[app.pkg]?.let { durationText(it / days) + " a day" }, elsewhere[app.pkg]?.let { "in $it" }).joinToString(" · ").ifBlank { null }, app.pkg in chosen) { toggle(app.pkg) }

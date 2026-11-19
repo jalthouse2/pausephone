@@ -153,6 +153,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
+        com.jalthouse.pausephone.ui.warmUpDots()
         WeeklyLetter.schedule(this)
         DailyIntention.schedule(this)
         if (intent?.getBooleanExtra(DailyIntention.EXTRA_OPEN, false) == true) openIntention = true

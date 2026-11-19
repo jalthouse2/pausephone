@@ -12,6 +12,8 @@ import android.view.inputmethod.InputMethodManager
 import androidx.core.content.ContextCompat
 import com.jalthouse.pausephone.PauseActivity
 import com.jalthouse.pausephone.PauseMode
+import com.jalthouse.pausephone.data.APP_PARTS
+import com.jalthouse.pausephone.data.PART_PACKAGES
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Sessions
 import com.jalthouse.pausephone.data.Store
@@ -26,6 +28,7 @@ class PauseService : AccessibilityService() {
     private var currentId: String? = null
     private var lastLaunch = 0L
     private var lastUrlCheck = 0L
+    private var lastPartCheck = 0L
     private var keyboards: Set<String> = emptySet()
 
     private val screenReceiver = object : BroadcastReceiver() {
@@ -60,6 +63,7 @@ class PauseService : AccessibilityService() {
         }
         ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         handler.post(tick)
+        com.jalthouse.pausephone.ui.warmUpDots()
     }
 
     override fun onDestroy() {
@@ -81,8 +85,10 @@ class PauseService : AccessibilityService() {
         }
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> onForeground(pkg)
-            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ->
-                if (pkg in BROWSERS) checkUrl(pkg, force = false)
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> when (pkg) {
+                in BROWSERS -> checkUrl(pkg, force = false)
+                in PART_PACKAGES -> checkParts(pkg, force = false)
+            }
         }
     }
 
@@ -91,12 +97,41 @@ class PauseService : AccessibilityService() {
             checkUrl(pkg, force = true)
             return
         }
+        if (pkg in PART_PACKAGES && checkParts(pkg, force = true)) return
         val rule = Store.ruleForPackage(pkg)
         if (rule == null) {
             currentId = null
             return
         }
         enter(rule)
+    }
+
+    /**
+     * For apps with parts you can pause on their own (Reels, Shorts): looks for the screens
+     * only that part shows. Returns true when it handled the event.
+     */
+    private fun checkParts(pkg: String, force: Boolean): Boolean {
+        val parts = APP_PARTS.filter { it.pkg == pkg }.mapNotNull { p -> Store.ruleForPart(p.id)?.let { p to it } }
+        if (parts.isEmpty()) return false
+        val now = System.currentTimeMillis()
+        if (!force && now - lastPartCheck < URL_CHECK_MS) return true
+        lastPartCheck = now
+        val root = rootInActiveWindow ?: return true
+        val inside = parts.firstOrNull { (part, _) ->
+            part.viewIds.any { id -> root.findAccessibilityNodeInfosByViewId(id).orEmpty().any { it.isVisibleToUser } }
+        }
+        if (inside != null) {
+            enter(inside.second)
+            return true
+        }
+        // In the app, but not in that part.
+        val appRule = Store.ruleForPackage(pkg)
+        if (appRule != null) {
+            enter(appRule)
+        } else if (parts.any { it.second.id == currentId }) {
+            currentId = null
+        }
+        return true
     }
 
     /** Reads the browser's address bar and applies a website rule if one matches. */

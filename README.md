@@ -2,7 +2,7 @@
 
 *take a pause. be present.*
 
-An Android app for using your phone on purpose. Before an app or website you've chosen opens, a cloud of tiny dots breathes out and back in for a few seconds, with a quote underneath. Then you decide: go in, or not now.
+An Android app for using your phone on purpose. Before an app or website you've chosen opens, a cloud of tiny dots breathes in and out for a few seconds, with a quote underneath. Then you decide: go in, or never mind.
 
 ## What it does
 
@@ -14,7 +14,7 @@ An Android app for using your phone on purpose. Before an app or website you've 
 - **Blocking.** Block an app or site completely, or at set times of day that you choose.
 - **Unlock pause.** A few seconds of breathing each time you unlock the phone.
 - **Going in to…** At the pause you can tap a word for what you're going in for. Today shows what you went in for. You can edit the words.
-- **Instead.** After "Not now", [pause] suggests something else to do from a list you write.
+- **Instead.** After "Never mind", [pause] suggests something else to do from a list you write.
 - **Breath you can feel and hear.** A soft tap as each breath begins, and an optional bell as the dots settle into the ensō.
 - **Today.** How many times you paused, went in, let it go, and took a breather, plus a few calm sentences about your week. No streaks and no scores.
 - **Black version.** Settings › Appearance, and a light or dark breathing screen.
@@ -46,7 +46,7 @@ Building it yourself: open the folder in Android Studio and press Run, or `./gra
 | Today, Apps and sites, rule sliders, unlock pause | `MainActivity.kt` |
 | Colours, Manrope type, ensō logo, shared controls | `ui/Theme.kt`, `ui/Components.kt` |
 
-Android has no public way to intercept an app launch, so [pause] uses an **accessibility service**. When the app in front changes to one with a rule, the service opens the breathing screen on top of it. "Open" closes the breathing screen and reveals the app underneath; "Not now" goes to the home screen. For websites, the service reads the address bar of supported browsers: Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.
+Android has no public way to intercept an app launch, so [pause] uses an **accessibility service**. When the app in front changes to one with a rule, the service opens the breathing screen on top of it. "Open" closes the breathing screen and reveals the app underneath; "Never mind" goes to the home screen. For websites, the service reads the address bar of supported browsers: Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.
 
 If you leave an app and come back within 2 minutes, it's the same session and doesn't count as a new open.
 

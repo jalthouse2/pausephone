@@ -347,7 +347,7 @@ private fun ColumnScope.WhyPause(next: () -> Unit) {
     Heading("Not a wall. A breath.", "[pause] is here so that you choose your phone, instead of it choosing you.")
     Spacer(Modifier.height(24.dp))
     Column(Modifier.verticalScroll(rememberScrollState()).weight(1f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Point("A pause before the apps you choose", "A few seconds of breathing, then you decide: go in, or not now.")
+        Point("A pause before the apps you choose", "A few seconds of breathing, then you decide: go in, or never mind.")
         Point("Limits you set yourself", "How often, how long, and when. Gentle, never locked away from you.")
         Point("No streaks, no scores", "Nothing to win or lose. Just a calmer way of being on your phone.")
     }

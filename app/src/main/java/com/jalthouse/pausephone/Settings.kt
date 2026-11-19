@@ -196,7 +196,7 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                     }
                     EditableList(
                         title = "Instead",
-                        subtitle = "After \"Not now\", [pause] suggests one of these.",
+                        subtitle = "After \"Never mind\", [pause] suggests one of these.",
                         items = Store.ideas,
                         addLabel = "Add an idea",
                         placeholder = "call a friend",

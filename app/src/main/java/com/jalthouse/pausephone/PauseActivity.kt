@@ -85,7 +85,7 @@ enum class PauseMode {
     UNLOCK,
     /** "Breathe now" from the app. */
     FREE,
-    /** After "Not now": something else you could do. The idea travels in the reason. */
+    /** After "Never mind": something else you could do. The idea travels in the reason. */
     LET_GO,
 }
 
@@ -421,7 +421,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             when (req.mode) {
                 PauseMode.ENTRY -> {
-                    PrimaryButton("Not now", act.notNow, Modifier.weight(1f), dark = true)
+                    PrimaryButton("Never mind", act.notNow, Modifier.weight(1f), dark = true)
                     if (!waiting) QuietButton("Open $label", { act.goIn(intent) }, Modifier.weight(1f), dark = true)
                     else Spacer(Modifier.weight(1f))
                 }

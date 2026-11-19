@@ -346,7 +346,7 @@ object Store {
         get() = list("intentions", listOf("reply to someone", "look something up", "just browsing"))
         set(v) = putList("intentions", v)
 
-    /** Things to do instead, offered after "Not now". */
+    /** Things to do instead, offered after "Never mind". */
     var ideas: List<String>
         get() = list("ideas", listOf("stretch for a minute", "step outside", "drink a glass of water", "look out the window"))
         set(v) = putList("ideas", v)

@@ -862,7 +862,8 @@ internal fun loadApps(context: Context): List<AppEntry> {
 
 private val PAUSES = (0..10).toList()
 private val BREATHS = (3..8).toList()
-private val OPENS = (1..20).toList() + 0                                      // 0 = no limit
+private const val BLOCKED = -1
+private val OPENS = listOf(BLOCKED) + (1..20).toList() + 0                    // -1 = none (blocked), 0 = no limit
 private val SESSIONS = listOf(5, 10, 15, 20, 30, 45, 60, 90, 120, 150, 180, 210, 240, 0) // 0 = no limit
 private val BREATHERS = listOf(0, 5, 10, 15, 20, 30, 45, 60)                  // 0 = never
 
@@ -889,8 +890,13 @@ private fun RuleScreen(id: String, back: () -> Unit) {
             ) { save(rule.copy(breathSec = it)) }
             StepSlider(
                 "Opens per day", "After that it stays closed until tomorrow",
-                OPENS, rule.opensPerDay, { if (it == 0) "no limit" else if (it == 1) "1 open" else "$it opens" },
-            ) { save(rule.copy(opensPerDay = it)) }
+                OPENS, if (rule.blocked) BLOCKED else rule.opensPerDay,
+                { when (it) { BLOCKED -> "none · blocked"; 0 -> "no limit"; 1 -> "1 open"; else -> "$it opens" } },
+            ) {
+                // 0 opens a day is the same as blocking completely, and the switch below follows it.
+                if (it == BLOCKED) save(rule.copy(blocked = true))
+                else save(rule.copy(blocked = false, opensPerDay = it))
+            }
             StepSlider(
                 "Session length", "Then the breathing cloud returns",
                 SESSIONS, rule.sessionMin, { if (it == 0) "no limit" else minutesText(it) },
@@ -906,7 +912,7 @@ private fun RuleScreen(id: String, back: () -> Unit) {
                 "Block completely",
                 "It stays closed until you turn this off",
                 rule.blocked,
-            ) { save(rule.copy(blocked = it)) }
+            ) { save(rule.copy(blocked = it)) } // the opens dots move to "none" and back with it
             TextButton(
                 onClick = { Store.removeRule(id); back() },
                 modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),

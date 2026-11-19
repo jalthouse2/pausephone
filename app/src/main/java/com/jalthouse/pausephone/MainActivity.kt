@@ -360,6 +360,30 @@ private fun TodayScreen() {
             StatBox("${stats.breathers}", "breathers", Modifier.weight(1f))
         }
 
+        val went = stats.intents.entries.sortedByDescending { it.value }
+        if (went.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("What you went in for", style = Type.heading, color = Ink.ink)
+                Text(
+                    went.joinToString(" · ") { "${it.key} ${it.value}" },
+                    style = Type.body.copy(fontSize = 15.sp),
+                    color = Ink.muted,
+                )
+            }
+        }
+
+        val letter = weekLetter(rules)
+        Panel {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (LocalDate.now().dayOfWeek == java.time.DayOfWeek.SUNDAY) "Your week" else "This week so far",
+                    style = Type.heading,
+                    color = Ink.ink,
+                )
+                Text(letter, style = Type.body, color = Ink.ink)
+            }
+        }
+
         Column(Modifier.padding(bottom = 24.dp)) {
             Text("Opens left today", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
             if (rules.isEmpty()) {
@@ -375,6 +399,33 @@ private fun TodayScreen() {
             }
         }
     }
+}
+
+private fun times(n: Int) = if (n == 1) "once" else if (n == 2) "twice" else "$n times"
+
+/** A few calm sentences about the last seven days. No scores, no streaks. */
+private fun weekLetter(rules: List<Rule>): String {
+    val week = Store.week()
+    val pauses = week.sumOf { it.second.pauses }
+    if (pauses == 0) return "Your week starts here. There's nothing to tell yet, and that's fine."
+    val letGo = week.sumOf { it.second.letGo }
+    val breathers = week.sumOf { it.second.breathers }
+    val lines = mutableListOf<String>()
+    lines += if (letGo > 0) "You paused ${times(pauses)} and let it go ${times(letGo)}."
+    else "You paused ${times(pauses)}."
+    val byApp = mutableMapOf<String, Int>()
+    week.forEach { (_, d) -> d.letGoBy.forEach { (k, v) -> byApp[k] = (byApp[k] ?: 0) + v } }
+    byApp.maxByOrNull { it.value }?.let { (id, n) ->
+        val name = rules.find { it.id == id }?.label ?: id
+        if (n > 1) lines += "You let $name go most often, ${times(n)}."
+    }
+    val active = week.filter { it.second.pauses > 0 }
+    if (active.size >= 3) {
+        val quiet = active.minByOrNull { it.second.wentIn }!!.first
+        lines += "Your quietest day was ${quiet.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())}."
+    }
+    if (breathers > 0) lines += "You took ${if (breathers == 1) "a breather" else "$breathers breathers"} along the way."
+    return lines.joinToString(" ")
 }
 
 @Composable
@@ -522,6 +573,43 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             Store.breatheLight,
         ) { Store.breatheLight = it }
 
+        ToggleRow(
+            "Breath you can feel",
+            "A soft tap as each breath in and out begins",
+            Store.breathVibration,
+        ) { Store.breathVibration = it }
+        ToggleRow(
+            "A bell at the rest",
+            "A quiet bell as the dots settle into the ensō. Silent when your phone is on silent.",
+            Store.restBell,
+        ) { Store.restBell = it }
+
+        EditableList(
+            title = "Going in to…",
+            subtitle = "Words you can tap at the pause to say what you're going in for.",
+            items = Store.intentions,
+            addLabel = "Add a word",
+            placeholder = "check the news",
+        ) { Store.intentions = it }
+        EditableList(
+            title = "Instead",
+            subtitle = "After \"Not now\", [pause] suggests one of these.",
+            items = Store.ideas,
+            addLabel = "Add an idea",
+            placeholder = "call a friend",
+        ) { Store.ideas = it }
+
+        Panel(
+            Modifier.clickable(role = Role.Button) {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TIP_URL)))
+            },
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("Buy me a coffee", style = Type.heading, color = Ink.ink)
+                Text("[pause] is free. If it helps you, you can leave a tip.", style = Type.small, color = Ink.muted)
+            }
+        }
+
         Panel {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("About", style = Type.heading, color = Ink.ink)
@@ -540,6 +628,70 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             }
         }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+private const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
+
+/** A short list you can add to and remove from. */
+@Composable
+private fun EditableList(
+    title: String,
+    subtitle: String,
+    items: List<String>,
+    addLabel: String,
+    placeholder: String,
+    onChange: (List<String>) -> Unit,
+) {
+    var adding by remember { mutableStateOf(false) }
+    Panel {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(title, style = Type.heading, color = Ink.ink)
+            Text(subtitle, style = Type.small, color = Ink.muted)
+            items.forEachIndexed { i, item ->
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(item, style = Type.body, color = Ink.ink, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onChange(items.filterIndexed { j, _ -> j != i }) }) {
+                        Text("Remove", style = Type.small, color = Ink.muted)
+                    }
+                }
+            }
+            QuietButton(addLabel, { adding = true }, Modifier.fillMaxWidth().padding(top = 4.dp).height(48.dp))
+        }
+    }
+    if (adding) {
+        var text by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { adding = false },
+            containerColor = Ink.paper,
+            title = { Text(addLabel, style = Type.heading, color = Ink.ink) },
+            text = {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.take(40) },
+                    singleLine = true,
+                    placeholder = { Text(placeholder, style = Type.body, color = Ink.muted) },
+                    textStyle = Type.body,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Ink.ink,
+                        unfocusedBorderColor = Ink.track,
+                        cursorColor = Ink.ink,
+                        focusedTextColor = Ink.ink,
+                        unfocusedTextColor = Ink.ink,
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val t = text.trim()
+                    if (t.isNotEmpty()) onChange(items + t)
+                    adding = false
+                }) { Text("Add", style = Type.button, color = Ink.ink) }
+            },
+            dismissButton = {
+                TextButton(onClick = { adding = false }) { Text("Cancel", style = Type.button, color = Ink.muted) }
+            },
+        )
     }
 }
 

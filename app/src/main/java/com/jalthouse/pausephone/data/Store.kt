@@ -80,6 +80,10 @@ data class DayStats(
     val letGo: Int = 0,
     val breathers: Int = 0,
     val opens: Map<String, Int> = emptyMap(),
+    /** How many times each app or site was let go. */
+    val letGoBy: Map<String, Int> = emptyMap(),
+    /** What you said you went in for, and how often. */
+    val intents: Map<String, Int> = emptyMap(),
 )
 
 /** Everything the app remembers, kept on the phone in SharedPreferences. */
@@ -166,44 +170,108 @@ object Store {
 
     fun onBreak(now: Long = System.currentTimeMillis()) = breakUntil > now
 
+    // ---- lists you can edit ----
+
+    private fun list(key: String, default: List<String>): List<String> {
+        val raw = prefs.getString(key, null) ?: return default
+        val a = runCatching { JSONArray(raw) }.getOrNull() ?: return default
+        return (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() }
+    }
+
+    private fun putList(key: String, v: List<String>) {
+        prefs.edit().putString(key, JSONArray(v).toString()).apply()
+        changed()
+    }
+
+    /** Words you can tap at the pause to say what you're going in for. */
+    var intentions: List<String>
+        get() = list("intentions", listOf("reply to someone", "look something up", "just browsing"))
+        set(v) = putList("intentions", v)
+
+    /** Things to do instead, offered after "Not now". */
+    var ideas: List<String>
+        get() = list("ideas", listOf("stretch for a minute", "step outside", "drink a glass of water", "look out the window"))
+        set(v) = putList("ideas", v)
+
+    // ---- breathing ----
+
+    /** A soft tap at the start of each breath in and out. */
+    var breathVibration: Boolean
+        get() = prefs.getBoolean("breathVibration", true)
+        set(v) { prefs.edit().putBoolean("breathVibration", v).apply(); changed() }
+
+    /** A quiet bell as the dots come to rest. Silent when the phone is on silent or vibrate. */
+    var restBell: Boolean
+        get() = prefs.getBoolean("restBell", false)
+        set(v) { prefs.edit().putBoolean("restBell", v).apply(); changed() }
+
     // ---- daily stats ----
 
-    private fun dayKey() = "stats_" + LocalDate.now().toString()
+    private fun dayKey(date: LocalDate = LocalDate.now()) = "stats_$date"
 
-    private fun dayJson(): JSONObject =
-        runCatching { JSONObject(prefs.getString(dayKey(), "{}")!!) }.getOrDefault(JSONObject())
+    private fun dayJson(date: LocalDate = LocalDate.now()): JSONObject =
+        runCatching { JSONObject(prefs.getString(dayKey(date), "{}")!!) }.getOrDefault(JSONObject())
 
-    fun today(): DayStats {
-        val o = dayJson()
-        val opens = o.optJSONObject("opens")
+    private fun saveDay(o: JSONObject) {
+        prefs.edit().putString(dayKey(), o.toString()).apply()
+        changed()
+    }
+
+    private fun counts(o: JSONObject?): Map<String, Int> {
         val map = mutableMapOf<String, Int>()
-        opens?.keys()?.forEach { k -> map[k] = opens.optInt(k, 0) }
+        o?.keys()?.forEach { k -> map[k] = o.optInt(k, 0) }
+        return map
+    }
+
+    private fun addCount(o: JSONObject, field: String, key: String) {
+        val m = o.optJSONObject(field) ?: JSONObject()
+        m.put(key, m.optInt(key, 0) + 1)
+        o.put(field, m)
+    }
+
+    fun day(date: LocalDate): DayStats {
+        val o = dayJson(date)
         return DayStats(
             pauses = o.optInt("pauses", 0),
             wentIn = o.optInt("wentIn", 0),
             letGo = o.optInt("letGo", 0),
             breathers = o.optInt("breathers", 0),
-            opens = map,
+            opens = counts(o.optJSONObject("opens")),
+            letGoBy = counts(o.optJSONObject("letGoBy")),
+            intents = counts(o.optJSONObject("intents")),
         )
+    }
+
+    fun today(): DayStats = day(LocalDate.now())
+
+    /** The last seven days, oldest first, ending today. */
+    fun week(): List<Pair<LocalDate, DayStats>> {
+        val today = LocalDate.now()
+        return (6 downTo 0).map { today.minusDays(it.toLong()) }.map { it to day(it) }
     }
 
     fun bump(field: String) {
         val o = dayJson()
         o.put(field, o.optInt(field, 0) + 1)
-        prefs.edit().putString(dayKey(), o.toString()).apply()
-        changed()
+        saveDay(o)
     }
 
     fun opensToday(id: String): Int = today().opens[id] ?: 0
 
-    /** Counts one open of [id] and one "went in". */
-    fun recordOpen(id: String) {
+    /** Counts one open of [id] and one "went in", with what you went in for if you said. */
+    fun recordOpen(id: String, intent: String? = null) {
         val o = dayJson()
-        val opens = o.optJSONObject("opens") ?: JSONObject()
-        opens.put(id, opens.optInt(id, 0) + 1)
-        o.put("opens", opens)
+        addCount(o, "opens", id)
         o.put("wentIn", o.optInt("wentIn", 0) + 1)
-        prefs.edit().putString(dayKey(), o.toString()).apply()
-        changed()
+        if (!intent.isNullOrBlank()) addCount(o, "intents", intent)
+        saveDay(o)
+    }
+
+    /** Counts one "let it go", for [id] if it was an app or site. */
+    fun recordLetGo(id: String?) {
+        val o = dayJson()
+        o.put("letGo", o.optInt("letGo", 0) + 1)
+        if (id != null) addCount(o, "letGoBy", id)
+        saveDay(o)
     }
 }

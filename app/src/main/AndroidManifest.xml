@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- A soft tap with each breath. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Lets the app list the apps on your phone so you can pick which ones get a pause. -->
     <queries>
         <intent>

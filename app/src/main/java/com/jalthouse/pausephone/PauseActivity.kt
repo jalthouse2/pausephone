@@ -3,6 +3,21 @@ package com.jalthouse.pausephone
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.SoundPool
+import android.os.VibrationEffect
+import android.os.Vibrator
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
+import com.jalthouse.pausephone.data.Quote
 import androidx.activity.ComponentActivity
 import androidx.activity.addCallback
 import androidx.activity.compose.setContent
@@ -70,6 +85,8 @@ enum class PauseMode {
     UNLOCK,
     /** "Breathe now" from the app. */
     FREE,
+    /** After "Not now": something else you could do. The idea travels in the reason. */
+    LET_GO,
 }
 
 private data class PauseRequest(val mode: PauseMode, val rule: Rule?, val reason: String?, val stamp: Long)
@@ -130,7 +147,7 @@ class PauseActivity : ComponentActivity() {
     private fun onBack() {
         when (request?.mode) {
             PauseMode.ENTRY -> notNow()
-            PauseMode.BLOCKED, PauseMode.SESSION_END -> goHome()
+            PauseMode.BLOCKED, PauseMode.SESSION_END, PauseMode.LET_GO -> goHome()
             else -> finish()
         }
     }
@@ -143,19 +160,22 @@ class PauseActivity : ComponentActivity() {
     }
 
     private fun notNow() {
-        Store.bump("letGo")
-        goHome()
+        val req = request
+        Store.recordLetGo(req?.rule?.id)
+        val ideas = Store.ideas
+        if (req == null || ideas.isEmpty()) goHome()
+        else request = req.copy(mode = PauseMode.LET_GO, reason = ideas.random())
     }
 
-    private fun goIn(rule: Rule) {
-        Store.recordOpen(rule.id)
+    private fun goIn(rule: Rule, intent: String?) {
+        Store.recordOpen(rule.id, intent)
         Sessions.start(rule)
         finish() // reveals the app or browser underneath
     }
 
     private fun actions(req: PauseRequest) = PauseActions(
         notNow = ::notNow,
-        goIn = { req.rule?.let(::goIn) ?: finish() },
+        goIn = { intent -> req.rule?.let { goIn(it, intent) } ?: finish() },
         goHome = ::goHome,
         close = ::finish,
     )
@@ -179,7 +199,7 @@ class PauseActivity : ComponentActivity() {
 
 private class PauseActions(
     val notNow: () -> Unit,
-    val goIn: () -> Unit,
+    val goIn: (intent: String?) -> Unit,
     val goHome: () -> Unit,
     val close: () -> Unit,
 )
@@ -192,6 +212,7 @@ private fun ordinal(n: Int) = when {
     else -> "${n}th"
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     val rule = req.rule
@@ -242,7 +263,19 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
         }
         PauseMode.UNLOCK -> "welcome back"
         PauseMode.FREE -> "breathe"
+        PauseMode.LET_GO -> "$label can wait"
     }
+    val context = LocalContext.current
+    val bell = rememberBell(context)
+    LaunchedEffect(breathWord) {
+        when (breathWord) {
+            "breathe in" -> if (Store.breathVibration) tap(context, 70)
+            "breathe out" -> if (Store.breathVibration) tap(context, 35)
+            "rest" -> if (Store.restBell) bell.play()
+        }
+    }
+    var intent by remember(req.stamp) { mutableStateOf<String?>(null) }
+
     val phase = when {
         (req.mode == PauseMode.ENTRY || req.mode == PauseMode.UNLOCK) && !waiting -> "ready when you are"
         else -> breathWord
@@ -274,9 +307,17 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             color = Ink.mistMuted,
             modifier = Modifier.padding(top = 6.dp).heightIn(min = 20.dp),
         )
-        val quote = QUOTES[quoteIndex]
+        val quote = if (req.mode == PauseMode.LET_GO) {
+            Quote("Maybe ${req.reason ?: "step outside"}.", "instead")
+        } else {
+            QUOTES[quoteIndex]
+        }
         Column(
-            Modifier.padding(top = 20.dp).widthIn(max = 320.dp).heightIn(min = 110.dp).alpha(quoteAlpha),
+            Modifier
+                .padding(top = 20.dp)
+                .widthIn(max = 320.dp)
+                .heightIn(min = 110.dp)
+                .alpha(if (req.mode == PauseMode.LET_GO) 1f else quoteAlpha),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -305,17 +346,41 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             )
         }
 
+        val intentions = Store.intentions
+        if (req.mode == PauseMode.ENTRY && !waiting && intentions.isNotEmpty()) {
+            Text("going in to…", style = Type.small, color = Ink.mistMuted, modifier = Modifier.padding(bottom = 8.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+            ) {
+                intentions.forEach { word ->
+                    val on = word == intent
+                    Text(
+                        word,
+                        style = Type.small.copy(fontSize = 14.sp),
+                        color = if (on) Ink.night else Ink.mist,
+                        modifier = Modifier
+                            .background(if (on) Ink.mist else Color.Transparent, RoundedCornerShape(20.dp))
+                            .border(1.dp, if (on) Ink.mist else Ink.mistLine, RoundedCornerShape(20.dp))
+                            .clickable(role = Role.Button) { intent = if (on) null else word }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                    )
+                }
+            }
+        }
+
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             when (req.mode) {
                 PauseMode.ENTRY -> {
                     PrimaryButton("Not now", act.notNow, Modifier.weight(1f), dark = true)
-                    if (!waiting) QuietButton("Open $label", act.goIn, Modifier.weight(1f), dark = true)
+                    if (!waiting) QuietButton("Open $label", { act.goIn(intent) }, Modifier.weight(1f), dark = true)
                     else Spacer(Modifier.weight(1f))
                 }
                 PauseMode.SESSION_END -> {
                     PrimaryButton("Close $label", act.goHome, Modifier.weight(1f), dark = true)
                     val canGoOn = rule != null && (rule.opensPerDay == 0 || Store.opensToday(rule.id) < rule.opensPerDay)
-                    if (canGoOn) QuietButton("Another session", act.goIn, Modifier.weight(1f), dark = true)
+                    if (canGoOn) QuietButton("Another session", { act.goIn(null) }, Modifier.weight(1f), dark = true)
                 }
                 PauseMode.BREATHER -> {
                     QuietButton("Close $label", act.goHome, Modifier.weight(1f), dark = true)
@@ -328,7 +393,43 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
                     else Spacer(Modifier.height(56.dp))
                 }
                 PauseMode.FREE -> PrimaryButton("Done", act.close, Modifier.weight(1f), dark = true)
+                PauseMode.LET_GO -> PrimaryButton("Done", act.goHome, Modifier.weight(1f), dark = true)
             }
         }
     }
+}
+
+/** A soft tap on the wrist of the phone. [strength] is 1–255. */
+private fun tap(context: Context, strength: Int) {
+    val v = context.getSystemService(Vibrator::class.java) ?: return
+    if (!v.hasVibrator()) return
+    v.vibrate(VibrationEffect.createOneShot(35, strength.coerceIn(1, 255)))
+}
+
+private class Bell(private val context: Context) {
+    private val pool = SoundPool.Builder()
+        .setMaxStreams(1)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build(),
+        )
+        .build()
+    private val sound = pool.load(context, R.raw.bell, 1)
+
+    fun play() {
+        val audio = context.getSystemService(AudioManager::class.java)
+        if (audio != null && audio.ringerMode != AudioManager.RINGER_MODE_NORMAL) return
+        pool.play(sound, 0.6f, 0.6f, 1, 0, 1f)
+    }
+
+    fun release() = pool.release()
+}
+
+@Composable
+private fun rememberBell(context: Context): Bell {
+    val bell = remember { Bell(context.applicationContext) }
+    DisposableEffect(Unit) { onDispose { bell.release() } }
+    return bell
 }

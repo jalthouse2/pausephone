@@ -11,9 +11,14 @@ An Android app for using your phone on purpose. Before an app or website you've 
 - **Opens per day.** 1–20, or no limit. When they're used up, the app rests until tomorrow.
 - **Session length.** 5 minutes to 4 hours, or no limit. When the time is up, the breathing screen comes back.
 - **A breather along the way.** One breath with the dot cloud after 5–60 minutes in an app.
-- **Blocking.** Block an app or site completely, or only at night (22:00 to 07:00).
+- **Blocking.** Block an app or site completely, or at set times of day that you choose.
 - **Unlock pause.** A few seconds of breathing each time you unlock the phone.
-- **Today.** How many times you paused, went in, let it go, and took a breather.
+- **Going in to…** At the pause you can tap a word for what you're going in for. Today shows what you went in for. You can edit the words.
+- **Instead.** After "Not now", [pause] suggests something else to do from a list you write.
+- **Breath you can feel and hear.** A soft tap as each breath begins, and an optional bell as the dots settle into the ensō.
+- **Today.** How many times you paused, went in, let it go, and took a breather, plus a few calm sentences about your week. No streaks and no scores.
+- **Black version.** Settings › Appearance, and a light or dark breathing screen.
+- **Tips.** [Buy me a coffee](https://www.buymeacoffee.com/hX1y1MzNAx) if it helps you.
 
 Everything stays on the phone. There is no account, no network access and no analytics.
 
@@ -49,7 +54,6 @@ If you leave an app and come back within 2 minutes, it's the same session and do
 
 - **Google Play.** Play restricts accessibility services to apps whose main purpose is accessibility, so publishing there would need a review argument or a different approach. Installing it yourself, or through F-Droid, is fine.
 - **Browser updates** sometimes rename the address bar's view id. If a browser stops being recognised, update its entry in `PauseService.BROWSERS`.
-- **Night hours** are fixed at 22:00 to 07:00 for now (`Store.nightStart` / `nightEnd`).
 - **Battery savers** on some phones (Xiaomi, Huawei, OnePlus) stop accessibility services. If pauses stop appearing, exempt [pause] from battery optimisation.
 - Sessions live in memory, so if Android kills the app, the next open starts a fresh pause.
 

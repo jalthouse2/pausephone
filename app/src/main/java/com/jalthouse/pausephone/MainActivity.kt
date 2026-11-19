@@ -505,7 +505,7 @@ internal const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
 
 /**
  * One status panel: soft red while [pause] can't work (Accessibility off, or Android has
- * stopped it), cream when all is set, with what it last noticed and decided.
+ * stopped it); plain and calm when all is set.
  */
 @Composable
 internal fun HealthCheck(enabled: Boolean) {
@@ -537,22 +537,16 @@ internal fun HealthCheck(enabled: Boolean) {
                 add("Accessibility is on, but Android isn't running [pause] right now. Tap here and switch it off and on again.")
                 add("If this keeps happening, set [pause] to Unrestricted in its battery settings.")
             }
-            else -> {
-                add("[pause] is on and running. Your pauses are good to go.")
-                if (last != null) {
-                    add("The last app it noticed was ${Usage.label(context, last)}, ${if (ago < 60) "$ago s" else "${ago / 60} min"} ago.")
-                }
-                PauseService.lastDecision?.let { add("Last decision: $it.") }
-            }
+            else -> add("[pause] is running.")
         }
         if (Store.onBreak()) add("You're on a break until ${clock(Store.breakUntil)}, so there are no pauses until then.")
-        if (ok && !Usage.granted(context)) add("Usage access is off, so screen time won't show. That's optional.")
     }
     val shape = RoundedCornerShape(18.dp)
     Column(
         Modifier
             .fillMaxWidth()
-            .background(if (ok) Ink.okBg else Ink.alertBg, shape)
+            .background(if (ok) Ink.paper else Ink.alertBg, shape)
+            .then(if (ok) Modifier.border(1.dp, Ink.line, shape) else Modifier)
             .then(if (!ok) Modifier.clickable(role = Role.Button) { openAccessibility(context) } else Modifier)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),

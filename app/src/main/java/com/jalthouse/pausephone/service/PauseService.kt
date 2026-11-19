@@ -51,6 +51,7 @@ class PauseService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         Store.init(this)
+        running = true
         val imm = getSystemService(InputMethodManager::class.java)
         keyboards = imm?.enabledInputMethodList?.map { it.packageName }?.toSet() ?: emptySet()
         val filter = IntentFilter().apply {
@@ -62,6 +63,7 @@ class PauseService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        running = false
         handler.removeCallbacks(tick)
         runCatching { unregisterReceiver(screenReceiver) }
         super.onDestroy()
@@ -73,6 +75,10 @@ class PauseService : AccessibilityService() {
         event ?: return
         val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName || pkg in IGNORED || pkg in keyboards) return
+        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            lastPackage = pkg
+            lastSeenAt = System.currentTimeMillis()
+        }
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> onForeground(pkg)
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED ->
@@ -115,6 +121,7 @@ class PauseService : AccessibilityService() {
     private fun enter(rule: Rule) {
         val now = System.currentTimeMillis()
         if (PauseActivity.visible || now - lastLaunch < LAUNCH_GAP_MS) return
+        lastDecision = decide(rule, now)
         if (Store.onBreak(now)) {
             currentId = null
             return
@@ -151,6 +158,16 @@ class PauseService : AccessibilityService() {
         }
     }
 
+    private fun decide(rule: Rule, now: Long): String = when {
+        Store.onBreak(now) -> "${rule.label}: no pause, you're on a break"
+        rule.blocked -> "${rule.label}: blocked"
+        rule.blockingWindow() != null -> "${rule.label}: blocked at this time"
+        Sessions.active(rule.id, now) != null -> "${rule.label}: no pause, you're inside a session you already opened"
+        rule.opensPerDay > 0 && Store.opensToday(rule.id) >= rule.opensPerDay -> "${rule.label}: no opens left today"
+        rule.pauseSec == 0 -> "${rule.label}: no pause, its pause is set to none"
+        else -> "${rule.label}: paused for ${rule.pauseSec} s"
+    }
+
     /** Runs every few seconds: session end and breathers along the way. */
     private fun checkSession() {
         val id = currentId ?: return
@@ -178,6 +195,12 @@ class PauseService : AccessibilityService() {
     }
 
     companion object {
+        /** For the "Is it working?" check in Settings. */
+        @Volatile var running = false
+        @Volatile var lastPackage: String? = null
+        @Volatile var lastSeenAt = 0L
+        @Volatile var lastDecision: String? = null
+
         private const val TICK_MS = 5_000L
         private const val URL_CHECK_MS = 800L
         private const val LAUNCH_GAP_MS = 1_500L

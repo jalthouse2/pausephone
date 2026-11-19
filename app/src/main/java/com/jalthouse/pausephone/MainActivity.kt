@@ -549,6 +549,8 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             }
         }
 
+        HealthCheck(enabled)
+
         Panel {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Take a break", style = Type.heading, color = Ink.ink)
@@ -670,6 +672,43 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
 }
 
 internal const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
+
+/** "Is it working?": what [pause] can see right now, in plain words. */
+@Composable
+private fun HealthCheck(enabled: Boolean) {
+    val context = LocalContext.current
+    var tick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(1500)
+            tick++
+        }
+    }
+    val running = PauseService.running
+    val last = PauseService.lastPackage
+    // Reading tick redraws this every 1.5 s.
+    val ago = if (tick >= 0) (System.currentTimeMillis() - PauseService.lastSeenAt) / 1000 else 0L
+    val lines = buildList {
+        add(
+            when {
+                !enabled -> "Accessibility is off for [pause], so it can't see your apps yet."
+                !running -> "Accessibility is on, but Android isn't running [pause] right now. Turn it off and on again in Accessibility settings. If this keeps happening, set [pause] to Unrestricted in its battery settings."
+                else -> "[pause] is on and running."
+            },
+        )
+        if (running && last != null) {
+            add("The last app it noticed was ${Usage.label(context, last)}, ${if (ago < 60) "$ago s" else "${ago / 60} min"} ago.")
+        }
+        PauseService.lastDecision?.let { add("Last decision: $it.") }
+        if (Store.onBreak()) add("You're on a break, so there are no pauses until it ends.")
+    }
+    Panel(Modifier.clickable(role = Role.Button) { if (!enabled || !running) openAccessibility(context) }) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Is it working?", style = Type.heading, color = Ink.ink)
+            lines.forEach { Text(it, style = Type.small, color = Ink.muted) }
+        }
+    }
+}
 
 /** A short list you can add to and remove from. */
 @Composable

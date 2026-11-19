@@ -129,6 +129,7 @@ private enum class Tab(val label: String, val icon: ImageVector?) {
 private sealed interface Screen {
     data object Unlock : Screen
     data object AddApp : Screen
+    data class Choose(val sites: Boolean) : Screen
     data class RuleEdit(val id: String) : Screen
 }
 
@@ -191,6 +192,7 @@ private fun ColumnScope.Main(
                         onPicked = { id -> stack.removeAt(stack.lastIndex); go(Screen.RuleEdit(id)) },
                         back = back,
                     )
+                    is Screen.Choose -> ChooseScreen(top.sites, onDone = back, back = back)
                     is Screen.RuleEdit -> RuleScreen(top.id, back)
                 }
             } else {
@@ -492,7 +494,7 @@ private fun AppsScreen(go: (Screen) -> Unit) {
             apps.forEachIndexed { i, r ->
                 ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < apps.lastIndex)
             }
-            PrimaryButton("Add an app", { go(Screen.AddApp) }, Modifier.fillMaxWidth().padding(top = 12.dp))
+            PrimaryButton("Add apps", { go(Screen.Choose(sites = false)) }, Modifier.fillMaxWidth().padding(top = 12.dp))
         }
         Column {
             Text("Websites", style = Type.heading, color = Ink.ink, modifier = Modifier.padding(bottom = 4.dp))
@@ -500,7 +502,7 @@ private fun AppsScreen(go: (Screen) -> Unit) {
             sites.forEachIndexed { i, r ->
                 ListRow(r.label, summary(r), { LetterTile(r.label) }, { go(Screen.RuleEdit(r.id)) }, divider = i < sites.lastIndex)
             }
-            PrimaryButton("Add a website", { addingSite = true }, Modifier.fillMaxWidth().padding(top = 12.dp))
+            PrimaryButton("Add websites", { go(Screen.Choose(sites = true)) }, Modifier.fillMaxWidth().padding(top = 12.dp))
         }
         Text(
             "Websites work in Chrome, Firefox, Samsung Internet, Edge, Brave, Opera and DuckDuckGo.",
@@ -801,7 +803,7 @@ private fun Choice(options: List<Pair<String, String>>, selected: String, onSele
 }
 
 @Composable
-private fun AddSiteDialog(onDone: (String?) -> Unit) {
+internal fun AddSiteDialog(onDone: (String?) -> Unit) {
     var text by remember { mutableStateOf("") }
     val domain = PauseService.hostOf(text)
     AlertDialog(

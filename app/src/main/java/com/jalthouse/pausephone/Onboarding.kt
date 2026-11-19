@@ -78,14 +78,6 @@ import kotlinx.coroutines.withContext
 
 private const val PAGES = 10
 
-/** Apps that most often pull people in, offered first when choosing. */
-private val USUAL_SUSPECTS = listOf(
-    "com.instagram.android", "com.zhiliaoapp.musically", "com.ss.android.ugc.trill",
-    "com.google.android.youtube", "com.twitter.android", "com.facebook.katana",
-    "com.reddit.frontpage", "com.snapchat.android", "com.instagram.barcelona",
-    "com.linkedin.android", "com.netflix.mediaclient", "com.pinterest",
-)
-
 private val PICKUPS = listOf(10, 20, 30, 40, 50, 60, 80, 100, 120, 150)
 
 /**
@@ -404,7 +396,7 @@ private fun ColumnScope.FirstApps(next: () -> Unit) {
             val usual = if (used.isNotEmpty()) {
                 used.mapNotNull { pkg -> list.find { it.pkg == pkg } }.take(8)
             } else {
-                list.filter { it.pkg in USUAL_SUSPECTS }
+                list.filter { it.pkg in USUAL_APPS }
             }
             val shown = if (showAll || usual.isEmpty()) list else usual
             shown.forEach { app ->

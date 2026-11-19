@@ -89,7 +89,7 @@ enum class PauseMode {
     LET_GO,
 }
 
-private data class PauseRequest(val mode: PauseMode, val rule: Rule?, val reason: String?, val stamp: Long)
+private data class PauseRequest(val mode: PauseMode, val rule: Rule?, val reason: String?, val stamp: Long, val minutes: Int = 0)
 
 class PauseActivity : ComponentActivity() {
 
@@ -141,7 +141,7 @@ class PauseActivity : ComponentActivity() {
             PauseMode.BREATHER -> Store.bump("breathers")
             else -> {}
         }
-        return PauseRequest(mode, rule, i.getStringExtra(EXTRA_REASON), System.nanoTime())
+        return PauseRequest(mode, rule, i.getStringExtra(EXTRA_REASON), System.nanoTime(), i.getIntExtra(EXTRA_MINUTES, 0))
     }
 
     private fun onBack() {
@@ -187,13 +187,15 @@ class PauseActivity : ComponentActivity() {
         private const val EXTRA_MODE = "mode"
         private const val EXTRA_ID = "id"
         private const val EXTRA_REASON = "reason"
+        private const val EXTRA_MINUTES = "minutes"
 
-        fun launchIntent(context: Context, mode: PauseMode, id: String?, reason: String? = null): Intent =
+        fun launchIntent(context: Context, mode: PauseMode, id: String?, reason: String? = null, minutes: Int = 0): Intent =
             Intent(context, PauseActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra(EXTRA_MODE, mode.name)
                 .putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_REASON, reason)
+                .putExtra(EXTRA_MINUTES, minutes)
     }
 }
 
@@ -220,6 +222,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     val breath = when {
         rule != null -> rule.breathSec
         req.mode == PauseMode.UNLOCK -> Store.unlockBreathSec
+        req.minutes > 0 -> Store.sitBreath
         else -> 4
     }
     val pauseSec = when (req.mode) {
@@ -252,6 +255,12 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
     val quoteAlpha by animateFloatAsState(if (quoteShown) 1f else 0f, tween(800), label = "quote")
     val waiting = secondsLeft > 0
 
+    // A timed sit: a bowl to begin (if you like), a bowl at the end.
+    val sitSec = req.minutes * 60
+    val sitting = req.mode == PauseMode.FREE && sitSec > 0
+    val sitLeft by remember(req.stamp, sitSec) { derivedStateOf { ceil(sitSec - clock.floatValue).toInt() } }
+    val sitOver = sitting && sitLeft <= 0
+
     val top = when (req.mode) {
         PauseMode.ENTRY -> "opening $label"
         PauseMode.BREATHER -> "a breather along the way"
@@ -262,11 +271,28 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             else -> "$label is resting"
         }
         PauseMode.UNLOCK -> "welcome back"
-        PauseMode.FREE -> "breathe"
+        PauseMode.FREE -> when {
+            sitOver -> "your sit is complete"
+            sitting -> "breathe · ${minutesText(req.minutes)}"
+            else -> "breathe"
+        }
         PauseMode.LET_GO -> "$label can wait"
     }
     val context = LocalContext.current
     val bell = rememberBell(context)
+    val bowl = rememberBowl(context)
+    val view = LocalView.current
+    DisposableEffect(sitting) {
+        view.keepScreenOn = sitting
+        onDispose { view.keepScreenOn = false }
+    }
+    LaunchedEffect(req.stamp) { if (sitting && Store.sitStartBowl) bowl.play(0.45f) }
+    LaunchedEffect(sitOver) {
+        if (sitOver) {
+            bowl.play(0.9f)
+            Store.bump("sits")
+        }
+    }
     LaunchedEffect(breathWord) {
         when (breathWord) {
             "breathe in" -> if (Store.breathVibration) tap(context, 70)
@@ -278,6 +304,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
 
     val phase = when {
         (req.mode == PauseMode.ENTRY || req.mode == PauseMode.UNLOCK) && !waiting -> "ready when you are"
+        sitOver -> "rest"
         else -> breathWord
     }
 
@@ -302,7 +329,11 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
             modifier = Modifier.padding(top = 16.dp),
         )
         Text(
-            if (waiting) "$secondsLeft s" else "",
+            when {
+                sitting && !sitOver -> "%d:%02d".format(sitLeft / 60, sitLeft % 60)
+                waiting -> "$secondsLeft s"
+                else -> ""
+            },
             style = Type.small.copy(fontSize = 14.sp),
             color = Ink.mistMuted,
             modifier = Modifier.padding(top = 6.dp).heightIn(min = 20.dp),
@@ -317,7 +348,7 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
                 .padding(top = 20.dp)
                 .widthIn(max = 320.dp)
                 .heightIn(min = 110.dp)
-                .alpha(if (req.mode == PauseMode.LET_GO) 1f else quoteAlpha),
+                .alpha(if (req.mode == PauseMode.LET_GO) 1f else if (sitting && !sitOver) 0f else quoteAlpha),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
@@ -392,7 +423,9 @@ private fun PauseScreen(req: PauseRequest, act: PauseActions) {
                     if (!waiting) PrimaryButton("Continue", act.close, Modifier.weight(1f), dark = true)
                     else Spacer(Modifier.height(56.dp))
                 }
-                PauseMode.FREE -> PrimaryButton("Done", act.close, Modifier.weight(1f), dark = true)
+                PauseMode.FREE ->
+                    if (sitting && !sitOver) QuietButton("End early", act.close, Modifier.weight(1f), dark = true)
+                    else PrimaryButton("Done", act.close, Modifier.weight(1f), dark = true)
                 PauseMode.LET_GO -> PrimaryButton("Done", act.goHome, Modifier.weight(1f), dark = true)
             }
         }
@@ -425,6 +458,45 @@ private class Bell(private val context: Context) {
     }
 
     fun release() = pool.release()
+}
+
+/** The singing bowl for timed sits. Plays at media volume, so you set how loud it is. */
+private class Bowl(context: Context) {
+    private val pool = SoundPool.Builder()
+        .setMaxStreams(2)
+        .setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build(),
+        )
+        .build()
+    private val sound = pool.load(context, R.raw.bowl, 1)
+    @Volatile private var loaded = false
+    private var waiting: Float? = null
+
+    init {
+        pool.setOnLoadCompleteListener { p, id, status ->
+            if (id == sound && status == 0) {
+                loaded = true
+                waiting?.let { v -> p.play(sound, v, v, 1, 0, 1f) }
+                waiting = null
+            }
+        }
+    }
+
+    fun play(volume: Float) {
+        if (loaded) pool.play(sound, volume, volume, 1, 0, 1f) else waiting = volume
+    }
+
+    fun release() = pool.release()
+}
+
+@Composable
+private fun rememberBowl(context: Context): Bowl {
+    val bowl = remember { Bowl(context.applicationContext) }
+    DisposableEffect(Unit) { onDispose { bowl.release() } }
+    return bowl
 }
 
 @Composable

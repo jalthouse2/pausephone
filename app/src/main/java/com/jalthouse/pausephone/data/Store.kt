@@ -374,6 +374,21 @@ object Store {
         get() = prefs.getInt("guardSec", 0)
         set(v) { prefs.edit().putInt("guardSec", v).apply(); changed() }
 
+    // ---- sitting (the meditation timer) ----
+
+    var sitMin: Int
+        get() = prefs.getInt("sitMin", 5)
+        set(v) { prefs.edit().putInt("sitMin", v).apply(); changed() }
+
+    var sitBreath: Int
+        get() = prefs.getInt("sitBreath", 5)
+        set(v) { prefs.edit().putInt("sitBreath", v).apply(); changed() }
+
+    /** A soft bowl as the sit begins; the end always has one. */
+    var sitStartBowl: Boolean
+        get() = prefs.getBoolean("sitStartBowl", true)
+        set(v) { prefs.edit().putBoolean("sitStartBowl", v).apply(); changed() }
+
     // ---- breathing ----
 
     /** A soft tap at the start of each breath in and out. */

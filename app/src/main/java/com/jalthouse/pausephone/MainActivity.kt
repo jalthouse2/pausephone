@@ -133,6 +133,7 @@ internal sealed interface Screen {
     data class Choose(val groupId: String, val sites: Boolean) : Screen
     data class SettingsPart(val part: String) : Screen
     data object Breakdown : Screen
+    data object Sit : Screen
 }
 
 class MainActivity : ComponentActivity() {
@@ -197,10 +198,11 @@ private fun ColumnScope.Main(
                     is Screen.GroupPart -> Guarded("Changing a rule?", back) { GroupPartScreen(top.id, top.part, back) }
                     is Screen.SettingsPart -> SettingsPartScreen(top.part, go, back)
                     Screen.Breakdown -> BreakdownScreen(back)
+                    Screen.Sit -> SitScreen(back)
                 }
             } else {
                 when (tab) {
-                    Tab.HOME -> HomeScreen()
+                    Tab.HOME -> HomeScreen(go)
                     Tab.APPS -> GroupsScreen(go)
                     Tab.TODAY -> TodayScreen(go)
                     Tab.SETTINGS -> SettingsScreen(go)
@@ -278,7 +280,7 @@ internal fun clock(millis: Long): String =
 
 /** Almost nothing: the ensō. Tap it to breathe. */
 @Composable
-private fun HomeScreen() {
+private fun HomeScreen(go: (Screen) -> Unit) {
     watchStore()
     val context = LocalContext.current
     val enabled = rememberServiceEnabled()
@@ -293,10 +295,10 @@ private fun HomeScreen() {
                 indication = null,
                 role = Role.Button,
                 onClickLabel = "Breathe",
-            ) { context.startActivity(PauseActivity.launchIntent(context, PauseMode.FREE, null)) },
+            ) { go(Screen.Sit) },
         ) { Enso(168.dp) }
         Text(
-            "tap to breathe",
+            "tap to sit and breathe",
             style = Type.small,
             color = Ink.muted,
             modifier = Modifier.padding(top = 20.dp),

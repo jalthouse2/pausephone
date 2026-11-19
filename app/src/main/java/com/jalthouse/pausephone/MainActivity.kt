@@ -605,6 +605,12 @@ internal fun EditableList(
             containerColor = Ink.paper,
             title = { Text(addLabel, style = Type.heading, color = Ink.ink) },
             text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (more.isNotEmpty()) {
+                    Text("Tap one to add it", style = Type.small, color = Ink.muted)
+                    SuggestionChips(more) { onChange(items + it); adding = false }
+                    Text("Or write your own", style = Type.small, color = Ink.muted, modifier = Modifier.padding(top = 4.dp))
+                }
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it.take(40) },
@@ -619,6 +625,7 @@ internal fun EditableList(
                         unfocusedTextColor = Ink.ink,
                     ),
                 )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {

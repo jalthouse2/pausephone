@@ -552,6 +552,16 @@ internal fun HealthCheck(enabled: Boolean) {
         Text(title, style = Type.heading, color = if (ok) Ink.ink else Ink.alertInk)
         lines.forEach { Text(it, style = Type.small, color = if (ok) Ink.muted else Ink.alertInk) }
         if (!ok) Text("Tap to turn it on", style = Type.body.copy(fontSize = 15.sp), color = Ink.alertInk, modifier = Modifier.padding(top = 6.dp))
+        if (ok) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(top = 4.dp)) {
+                TextButton(onClick = { openAccessibility(context) }) {
+                    Text("Accessibility settings", style = Type.body.copy(fontSize = 15.sp), color = Ink.ink)
+                }
+                TextButton(onClick = { Usage.openSettings(context) }) {
+                    Text("Usage access", style = Type.body.copy(fontSize = 15.sp), color = Ink.ink)
+                }
+            }
+        }
     }
 }
 

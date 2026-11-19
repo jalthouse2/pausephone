@@ -1,6 +1,5 @@
 package com.jalthouse.pausephone.service
 
-import android.accessibilityservice.AccessibilityButtonController
 import android.accessibilityservice.AccessibilityService
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -61,14 +60,6 @@ class PauseService : AccessibilityService() {
         }
         ContextCompat.registerReceiver(this, screenReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         handler.post(tick)
-        // The Accessibility shortcut button, if you turn it on: one breath, anywhere.
-        accessibilityButtonController.registerAccessibilityButtonCallback(
-            object : AccessibilityButtonController.AccessibilityButtonCallback() {
-                override fun onClicked(controller: AccessibilityButtonController) {
-                    if (!PauseActivity.visible) launch(PauseMode.FREE, null)
-                }
-            },
-        )
     }
 
     override fun onDestroy() {

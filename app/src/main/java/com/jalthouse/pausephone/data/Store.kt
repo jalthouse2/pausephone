@@ -413,7 +413,14 @@ object Store {
 
     /** Seconds of breathing before you can loosen a rule or take a break. 0 = off. */
     var guardSec: Int
-        get() = prefs.getInt("guardSec", 0)
+        get() {
+            // Earlier versions allowed long waits; bring them down to the new 5 s default once.
+            if (!prefs.getBoolean("guardEased", false)) {
+                val v = prefs.getInt("guardSec", 5)
+                prefs.edit().putInt("guardSec", if (v > 5) 5 else v).putBoolean("guardEased", true).apply()
+            }
+            return prefs.getInt("guardSec", 5)
+        }
         set(v) { prefs.edit().putInt("guardSec", v).apply(); changed() }
 
     // ---- sitting (the meditation timer) ----

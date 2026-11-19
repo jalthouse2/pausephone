@@ -162,8 +162,8 @@ private fun SettingsPart(part: String, go: (Screen) -> Unit, back: () -> Unit, g
                         (0..6).toList(), Store.dayStartHour, { if (it == 0) "midnight" else "%02d:00".format(it) },
                     ) { Store.dayStartHour = it }
                     StepSlider(
-                        "Breathe before loosening a rule", "Before changing a rule, choosing apps, or taking a break",
-                        listOf(0, 10, 20, 30, 60), Store.guardSec, { if (it == 0) "off" else "$it s" },
+                        "Breathe before loosening a rule", "Only when a change makes things easier, or before a break",
+                        listOf(0, 3, 5, 10, 20, 30), Store.guardSec, { if (it == 0) "off" else "$it s" },
                     ) { v -> if (v < Store.guardSec) guard("Making it easier to change your rules?") { Store.guardSec = v } else Store.guardSec = v }
 
                 }

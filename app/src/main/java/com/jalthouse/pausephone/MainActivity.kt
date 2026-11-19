@@ -1,13 +1,17 @@
 package com.jalthouse.pausephone
 
+import android.Manifest
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -86,6 +90,7 @@ import com.jalthouse.pausephone.data.Kind
 import com.jalthouse.pausephone.data.Rule
 import com.jalthouse.pausephone.data.Store
 import com.jalthouse.pausephone.data.TimeWindow
+import com.jalthouse.pausephone.data.weekLetter
 import com.jalthouse.pausephone.service.PauseService
 import com.jalthouse.pausephone.ui.BackHeader
 import com.jalthouse.pausephone.ui.Enso
@@ -128,6 +133,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
+        WeeklyLetter.schedule(this)
         setContent {
             watchStore()
             Ink.dark = Store.theme == "dark"
@@ -147,15 +153,15 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun App() {
-    var welcomed by remember { mutableStateOf(Store.welcomeDone) }
+    watchStore()
     var tab by remember { mutableStateOf(Tab.HOME) }
     val stack = remember { mutableStateListOf<Screen>() }
     val go: (Screen) -> Unit = { stack.add(it) }
     val back: () -> Unit = { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
 
     Column(Modifier.fillMaxSize().background(Ink.paper).systemBarsPadding()) {
-        if (!welcomed) {
-            Welcome { Store.welcomeDone = true; welcomed = true }
+        if (!Store.welcomeDone) {
+            Onboarding { Store.welcomeDone = true }
         } else {
             Main(tab, { tab = it }, stack, go, back)
         }
@@ -243,7 +249,7 @@ private fun serviceEnabled(context: Context): Boolean {
 }
 
 @Composable
-private fun rememberServiceEnabled(): Boolean {
+internal fun rememberServiceEnabled(): Boolean {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(serviceEnabled(context)) }
     LifecycleResumeEffect(Unit) {
@@ -253,39 +259,12 @@ private fun rememberServiceEnabled(): Boolean {
     return enabled
 }
 
-private fun openAccessibility(context: Context) =
+internal fun openAccessibility(context: Context) =
     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
 
 private fun clock(millis: Long): String =
     LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("HH:mm"))
-
-// ---------------------------------------------------------------- welcome
-
-@Composable
-private fun Welcome(onBegin: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(start = 32.dp, end = 32.dp, top = 110.dp, bottom = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Enso(184.dp)
-        Text(
-            "[pause]",
-            style = Type.wordmark.copy(fontSize = 34.sp, fontWeight = FontWeight.Light, letterSpacing = 1.4.sp),
-            color = Ink.ink,
-            modifier = Modifier.padding(top = 28.dp),
-        )
-        Text("take a pause. be present.", style = Type.body, color = Ink.muted, modifier = Modifier.padding(top = 10.dp))
-        Spacer(Modifier.weight(1f))
-        PrimaryButton("Begin", onBegin, Modifier.fillMaxWidth())
-        Text(
-            "Choose your apps, your pauses and your limits.",
-            style = Type.small,
-            color = Ink.muted,
-            modifier = Modifier.padding(top = 16.dp),
-        )
-    }
-}
 
 // ---------------------------------------------------------------- home
 
@@ -401,33 +380,6 @@ private fun TodayScreen() {
     }
 }
 
-private fun times(n: Int) = if (n == 1) "once" else if (n == 2) "twice" else "$n times"
-
-/** A few calm sentences about the last seven days. No scores, no streaks. */
-private fun weekLetter(rules: List<Rule>): String {
-    val week = Store.week()
-    val pauses = week.sumOf { it.second.pauses }
-    if (pauses == 0) return "Your week starts here. There's nothing to tell yet, and that's fine."
-    val letGo = week.sumOf { it.second.letGo }
-    val breathers = week.sumOf { it.second.breathers }
-    val lines = mutableListOf<String>()
-    lines += if (letGo > 0) "You paused ${times(pauses)} and let it go ${times(letGo)}."
-    else "You paused ${times(pauses)}."
-    val byApp = mutableMapOf<String, Int>()
-    week.forEach { (_, d) -> d.letGoBy.forEach { (k, v) -> byApp[k] = (byApp[k] ?: 0) + v } }
-    byApp.maxByOrNull { it.value }?.let { (id, n) ->
-        val name = rules.find { it.id == id }?.label ?: id
-        if (n > 1) lines += "You let $name go most often, ${times(n)}."
-    }
-    val active = week.filter { it.second.pauses > 0 }
-    if (active.size >= 3) {
-        val quiet = active.minByOrNull { it.second.wentIn }!!.first
-        lines += "Your quietest day was ${quiet.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.getDefault())}."
-    }
-    if (breathers > 0) lines += "You took ${if (breathers == 1) "a breather" else "$breathers breathers"} along the way."
-    return lines.joinToString(" ")
-}
-
 @Composable
 private fun StatBox(value: String, label: String, modifier: Modifier) {
     Column(
@@ -493,7 +445,7 @@ private fun AppsScreen(go: (Screen) -> Unit) {
             onDone = { domain ->
                 addingSite = false
                 if (domain != null) {
-                    if (Store.rule(domain) == null) Store.saveRule(Rule(id = domain, label = domain, kind = Kind.SITE))
+                    if (Store.rule(domain) == null) Store.saveRule(Rule(id = domain, label = domain, kind = Kind.SITE, pauseSec = Store.defaultPause))
                     go(Screen.RuleEdit(domain))
                 }
             },
@@ -599,6 +551,19 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
             placeholder = "call a friend",
         ) { Store.ideas = it }
 
+        val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            Store.letterOn = granted
+            WeeklyLetter.schedule(context)
+        }
+        ToggleRow("A letter on Sundays", "A few calm sentences about your week, at 10:00", Store.letterOn) { on ->
+            if (on && Build.VERSION.SDK_INT >= 33) {
+                askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                Store.letterOn = on
+                WeeklyLetter.schedule(context)
+            }
+        }
+
         Panel(
             Modifier.clickable(role = Role.Button) {
                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(TIP_URL)))
@@ -625,13 +590,16 @@ private fun SettingsScreen(go: (Screen) -> Unit) {
                         )
                     },
                 ) { Text("Report a bug or suggest an idea", style = Type.body, color = Ink.ink) }
+                TextButton(onClick = { Store.welcomeDone = false }) {
+                    Text("See the introduction again", style = Type.body, color = Ink.ink)
+                }
             }
         }
         Spacer(Modifier.height(16.dp))
     }
 }
 
-private const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
+internal const val TIP_URL = "https://www.buymeacoffee.com/hX1y1MzNAx"
 
 /** A short list you can add to and remove from. */
 @Composable
@@ -762,7 +730,7 @@ private fun AddSiteDialog(onDone: (String?) -> Unit) {
     )
 }
 
-private data class AppEntry(val pkg: String, val label: String, val icon: ImageBitmap?)
+internal data class AppEntry(val pkg: String, val label: String, val icon: ImageBitmap?)
 
 @Composable
 private fun AddAppScreen(onPicked: (String) -> Unit, back: () -> Unit) {
@@ -804,7 +772,7 @@ private fun AddAppScreen(onPicked: (String) -> Unit, back: () -> Unit) {
                         },
                         {
                             if (Store.rule(app.pkg) == null) {
-                                Store.saveRule(Rule(id = app.pkg, label = app.label, kind = Kind.APP))
+                                Store.saveRule(Rule(id = app.pkg, label = app.label, kind = Kind.APP, pauseSec = Store.defaultPause))
                             }
                             onPicked(app.pkg)
                         },
@@ -815,7 +783,7 @@ private fun AddAppScreen(onPicked: (String) -> Unit, back: () -> Unit) {
     }
 }
 
-private fun loadApps(context: Context): List<AppEntry> {
+internal fun loadApps(context: Context): List<AppEntry> {
     val pm = context.packageManager
     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     val px = (40 * context.resources.displayMetrics.density).toInt()

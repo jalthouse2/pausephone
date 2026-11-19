@@ -193,6 +193,31 @@ object Store {
         get() = list("ideas", listOf("stretch for a minute", "step outside", "drink a glass of water", "look out the window"))
         set(v) = putList("ideas", v)
 
+    // ---- from the introduction ----
+
+    /** How present you said you feel on your phone: "always", "sometimes" or "rarely". */
+    var presence: String
+        get() = prefs.getString("presence", "sometimes") ?: "sometimes"
+        set(v) { prefs.edit().putString("presence", v).apply(); changed() }
+
+    /** How many times a day you guessed you pick up your phone. */
+    var pickupsGuess: Int
+        get() = prefs.getInt("pickupsGuess", 60)
+        set(v) { prefs.edit().putInt("pickupsGuess", v).apply(); changed() }
+
+    /** The pause new apps and sites start with: longer if you said you're rarely present. */
+    val defaultPause: Int
+        get() = when (presence) {
+            "always" -> 4
+            "rarely" -> 8
+            else -> 6
+        }
+
+    /** A short letter about your week, as a notification on Sunday mornings. */
+    var letterOn: Boolean
+        get() = prefs.getBoolean("letterOn", true)
+        set(v) { prefs.edit().putBoolean("letterOn", v).apply(); changed() }
+
     // ---- breathing ----
 
     /** A soft tap at the start of each breath in and out. */
